@@ -135,6 +135,8 @@ def http_get(port, path):
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")[:500]
     except Exception as e:
         return None, str(e)
 
@@ -145,7 +147,8 @@ def check_theory():
     out = []
     try:
         with tunnel(8903):
-            r = sh([sys.executable, os.path.expanduser("~/workspace/qa-desktop.py")],
+            venv_py = os.path.expanduser("~/workspace/qa-venv/bin/python")
+            r = sh([venv_py, os.path.expanduser("~/workspace/qa-desktop.py")],
                    timeout=600)
             for line in r.stdout.splitlines():
                 m = re.match(r"(PASS|FAIL) ([^-\u2014]+)(?:\s*[-\u2014]\s*(.*))?", line)
@@ -207,12 +210,12 @@ def check_forum():
                 st == 200 and ("R Theory" in body),
                 "status=%s" % st,
                 ["GET /app/", "Expect 200 and the header R Theory link."])
-            st, body = http_get(8904, "/app/api/comments?site=r-theory&page=/book3/")
+            st, body = http_get(8904, "/app/api/comments?site=r-theory&page=book3")
             add("comments API answers",
-                st in (200, 400),
+                st == 200 and "posts" in body,
                 "status=%s" % st,
-                ["GET /app/api/comments?site=r-theory&page=/book3/",
-                 "Expect a JSON answer, not a 500."])
+                ["GET /app/api/comments?site=r-theory&page=book3",
+                 "Expect 200 with a JSON comment payload, not a 500."])
     except Exception as e:
         add("tunnel to Toetop", False, str(e)[:200],
             ["Check the tailnet tunnel to Toetop (100.124.30.78)."])
