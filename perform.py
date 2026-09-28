@@ -41,15 +41,25 @@ def load_suite(name):
 
 
 def group_tests(suite):
-    """Group by outcome signature; representative = fewest non-default inputs."""
+    """Group by outcome signature; representative = fewest non-default inputs.
+
+    Inert combinations (no effects, no assertion) are counted, not performed:
+    ceg.py's Markdown lists only outcome groups, and a combination the graph
+    asserts nothing about has nothing to check. Ordering matches the .md
+    (by signature) so group numbers line up.
+    """
     groups = {}
+    inert = 0
     for t in suite["tests"]:
         sig = (tuple(sorted(t["success"])), tuple(sorted(t["fail"])))
+        if not sig[0] and not sig[1]:
+            inert += 1
+            continue
         key = (len(t["inputs"]), t["id"])
         if sig not in groups or key < groups[sig][0]:
             groups[sig] = (key, t)
-    ordered = sorted(groups.items(), key=lambda kv: kv[1][1]["id"])
-    return [(sig, t) for sig, (_, t) in ordered]
+    ordered = sorted(groups.items(), key=lambda kv: (kv[0][0], kv[0][1]))
+    return [(sig, t) for sig, (_, t) in ordered], inert
 
 
 def main():
@@ -71,8 +81,10 @@ def main():
         for name in names:
             mod = importlib.import_module("drivers." + SUITE_MODULES[name])
             suite = load_suite(name)
-            groups = group_tests(suite)
-            log.write(f"\n## {name} — {len(groups)} outcome groups\n")
+            groups, inert = group_tests(suite)
+            log.write(f"\n## {name} — {len(groups)} outcome groups"
+                      + (f" ({inert} inert combinations counted, not performed)"
+                         if inert else "") + "\n")
             print(f"\n=== {name}: {len(groups)} groups ===", flush=True)
             n_pass = n_fail = n_skip = 0
             try:

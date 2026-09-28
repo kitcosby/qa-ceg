@@ -48,32 +48,72 @@ e10 = search returns matching threads for a valid query
 e10 <= c0=search AND c10=valid
 e11 = comments API recognizes the logged-in forum user
 e11 <= c0=api_comments AND c5=logged_in
-e12 = every forum page headers a working R Theory return link
-e12 <= c12=present
+e12 = an HTML forum page headers a working R Theory return link
+# Applicability, verified against app.py: the JSON comments API has no header;
+# a CSRF-rejected POST returns Flask's default 403 page (no header). e12 is
+# expected only when an HTML page actually renders.
+e12 <= c12=present AND c0=register AND c11=no
+e12 <= c12=present AND c0=register AND c11=yes AND c9=valid
+e12 <= c12=present AND c0=login AND c11=no
+e12 <= c12=present AND c0=login AND c11=yes AND c9=valid
+e12 <= c12=present AND c0=new_thread AND c11=no
+e12 <= c12=present AND c0=new_thread AND c11=yes AND c9=valid
+e12 <= c12=present AND c0=thread AND c11=no
+e12 <= c12=present AND c0=thread AND c11=yes AND c9=valid
+e12 <= c12=present AND c0=search AND c11=no
+e12 <= c12=present AND c0=search AND c11=yes AND c9=valid
 
 [FAIL]
-f1 = registration rejects an existing username, form re-renders with the error
-f1 <= c0=register AND c1=existing AND c11=yes
-f2 = registration rejects an invalid email, form re-renders with the error
-f2 <= c0=register AND c2=invalid AND c11=yes
+# Registration validation precedence, verified against app.py register():
+# username format -> email -> password -> duplicate check, elif chain:
+# only the FIRST failing check reports its error. Every fail rule below
+# carries the guards of the checks ahead of it, plus c9=valid (a 403 masks all).
+f1 = registration rejects a taken username or email, form re-renders with the error
+f1 <= c0=register AND c1=existing AND c2=valid AND c3=provided AND c9=valid AND c11=yes
+f2 = registration rejects an invalid or blank email, form re-renders with the error
+f2 <= c0=register AND c1=new AND c2=blank AND c9=valid AND c11=yes
+f2 <= c0=register AND c1=new AND c2=invalid AND c9=valid AND c11=yes
+f2 <= c0=register AND c1=existing AND c2=blank AND c9=valid AND c11=yes
+f2 <= c0=register AND c1=existing AND c2=invalid AND c9=valid AND c11=yes
 f3 = registration rejects a blank password, form re-renders with the error
-f3 <= c0=register AND c3=blank AND c11=yes
+f3 <= c0=register AND c1=new AND c2=valid AND c3=blank AND c9=valid AND c11=yes
+f3 <= c0=register AND c1=existing AND c2=valid AND c3=blank AND c9=valid AND c11=yes
 f4 = external next is ignored (no open redirect); falls back to /app/
-f4 <= c0=register AND c4=external AND c11=yes
-f5 = login rejects unknown username, form re-renders with the error
-f5 <= c0=login AND c1=new AND c11=yes
-f6 = login rejects a blank password, form re-renders with the error
-f6 <= c0=login AND c3=blank AND c11=yes
-f7 = anonymous new-thread POST is refused and sent to login with next
-f7 <= c0=new_thread AND c5=logged_out AND c11=yes
+# Requires a processed POST: with missing CSRF the 403 fires first and the
+# next parameter is never evaluated.
+f4 <= c0=register AND c4=external AND c9=valid AND c11=yes
+f4 <= c0=login AND c4=external AND c9=valid AND c11=yes
+# Login, verified against app.py login(): one message, "Invalid username or
+# password.", for every failure mode (blank/unknown/malformed username, blank
+# password, wrong password). The old f5/f6 split is not observable; merged.
+f5 = login rejects bad credentials, form re-renders with the error
+f5 <= c0=login AND c1=blank AND c3=blank AND c9=valid AND c11=yes
+f5 <= c0=login AND c1=blank AND c3=provided AND c9=valid AND c11=yes
+f5 <= c0=login AND c1=new AND c3=blank AND c9=valid AND c11=yes
+f5 <= c0=login AND c1=new AND c3=provided AND c9=valid AND c11=yes
+f5 <= c0=login AND c1=invalid_chars AND c3=blank AND c9=valid AND c11=yes
+f5 <= c0=login AND c1=invalid_chars AND c3=provided AND c9=valid AND c11=yes
+f5 <= c0=login AND c1=existing AND c3=blank AND c9=valid AND c11=yes
+f7 = anonymous new-thread request is refused and sent to login with next
+# GET of the form is refused the same way as POST; no c11 guard.
+f7 <= c0=new_thread AND c5=logged_out
 f8 = anonymous comment POST is refused
 f8 <= c0=thread AND c5=logged_out AND c11=yes
 f9 = empty comment POST is rejected, thread re-renders with the error
-f9 <= c0=thread AND c5=logged_in AND c6=empty AND c11=yes
+f9 <= c0=thread AND c5=logged_in AND c6=empty AND c9=valid AND c11=yes
 f10 = POST with missing CSRF token is rejected
-f10 <= c9=missing AND c11=yes
+# Applicability: only pages that accept POSTs. Search is GET-only and the
+# JSON comments API validates its own header; neither can produce f10.
+f10 <= c0=register AND c9=missing AND c11=yes
+f10 <= c0=login AND c9=missing AND c11=yes
+f10 <= c0=new_thread AND c9=missing AND c11=yes
+f10 <= c0=thread AND c9=missing AND c11=yes
 f11 = comments API treats a logged-out reader as anonymous
 f11 <= c0=api_comments AND c5=logged_out
+f12 = registration rejects a malformed username, form re-renders with the error
+# First check in the elif chain: no guards ahead of it except CSRF.
+f12 <= c0=register AND c1=blank AND c9=valid AND c11=yes
+f12 <= c0=register AND c1=invalid_chars AND c9=valid AND c11=yes
 
 [REQUIREMENTS]
 REQ-FO-001 : register form action posts under the /app prefix -> e1
@@ -83,12 +123,12 @@ REQ-FO-004 : login form action posts under the /app prefix -> e4
 REQ-FO-005 : successful login 302-redirects into the forum -> e5
 REQ-FO-006 : login honors a relative ?next= and returns the reader to the exact theory page -> e6
 REQ-FO-007 : already-logged-in visits to /login and /register respect next -> e3, e6
-REQ-FO-008 : duplicate username, invalid email, and blank password are rejected with the form re-rendered -> f1, f2, f3
-REQ-FO-009 : external next URLs are never honored (no open redirect) -> f4
-REQ-FO-010 : unknown username and blank password fail login with the form re-rendered -> f5, f6
+REQ-FO-008 : malformed username, invalid or blank email, blank password, and taken username/email are rejected with the form re-rendered; the first failing check wins -> f12, f2, f3, f1
+REQ-FO-009 : external next URLs are never honored on register or login (no open redirect) -> f4
+REQ-FO-010 : bad login credentials fail with the form re-rendered and a single Invalid-username-or-password message -> f5
 REQ-FO-011 : new threads require login, a title, and a category -> e7, e8, f7
 REQ-FO-012 : comments require login and a non-empty body -> e9, f8, f9
-REQ-FO-013 : POSTs without a valid CSRF token are rejected -> f10
+REQ-FO-013 : POSTs without a valid CSRF token are rejected with 403, masking all other validation -> f10
 REQ-FO-014 : search returns matching threads for a valid query -> e10
 REQ-FO-015 : the comments API recognizes logged-in users and treats logged-out readers as anonymous -> e11, f11
-REQ-FO-016 : every forum page carries a working R Theory return link -> e12
+REQ-FO-016 : every rendered HTML forum page carries a working R Theory return link; the JSON comments API and CSRF-reject pages are exempt -> e12

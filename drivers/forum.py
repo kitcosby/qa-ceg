@@ -128,20 +128,21 @@ def setup_run(suite):
     if st != 200:
         raise RuntimeError(f"tunnel/forum not reachable (status={st})")
     _ensure_performer_account()
+    tid = _ensure_thread()
+    if not tid:
+        raise RuntimeError("could not create the QA thread for comment tests")
 
 
 def teardown_run():
-    if not _created_users:
-        return
-    # Delete throwaway accounts (and their dependent rows) on the lampy
-    # distro. The script travels via ssh stdin to avoid Windows cmd quoting.
-    users = _created_users[:]
+    # Delete throwaway accounts by name pattern, not just the in-memory list:
+    # if a previous run was interrupted, its accounts persist but the list
+    # does not. All performer accounts are throwaways by construction.
     script = (
-        "import sys, psycopg\n"
-        "users = sys.argv[1:]\n"
+        "import psycopg\n"
         "conn = psycopg.connect(host='/var/run/postgresql', dbname='forum', user='forum')\n"
         "cur = conn.cursor()\n"
-        "cur.execute('SELECT id FROM users WHERE username = ANY(%s)', (users,))\n"
+        "cur.execute(\"SELECT id FROM users WHERE username = 'performer_qa'\"\n"
+        "          \" OR username LIKE 'perfuser\\\\_%'\")\n"
         "ids = [r[0] for r in cur.fetchall()]\n"
         "for tbl, col in [('forum_events','user_id'),('posts','user_id'),('threads','user_id')]:\n"
         "    cur.execute(f'DELETE FROM {tbl} WHERE {col} = ANY(%s)', (ids,))\n"
@@ -152,9 +153,7 @@ def teardown_run():
     import subprocess
     with open("/tmp/forum_cleanup.py", "w") as f:
         f.write(script)
-    # Usernames are alphanumeric-safe; they ride inside the single remote
-    # command string because the wrapper passes only $1 to ssh.
-    remote = "wsl -d lampy -u root -- python3 - " + " ".join(users)
+    remote = "wsl -d lampy -u root -- python3 -"
     with open("/tmp/forum_cleanup.py") as f:
         r = subprocess.run(
             [os.path.expanduser("~/workspace/toetop-ssh-kitco.sh"), remote],
@@ -218,16 +217,17 @@ def _do_register(c, iv):
     obs["f10"] = st in (400, 403)
     if iv["c9"] == "missing":
         return obs
-    # valid csrf from here; errors render in div.error
+    # valid csrf from here; errors render in div.error.
+    # Observations use the app's exact messages (verified in app.py).
     errs = _errors(body)
     blob = " ".join(errs)
-    obs["f1"] = st == 200 and any(
-        w in blob for w in ("already", "taken", "exists"))
-    obs["f2"] = st == 200 and "email" in blob
-    obs["f3"] = st == 200 and "password" in blob
-    obs["f4"] = "evil.example.com" not in url
-    created = path.rstrip("/").endswith("/app") and st == 200 and not errs
-    obs["e2"] = created and iv["c4"] == "absent"
+    obs["f1"] = st == 200 and "is taken" in blob
+    obs["f2"] = st == 200 and "valid email" in blob
+    obs["f3"] = st == 200 and "at least 8 characters" in blob
+    obs["f12"] = st == 200 and "username must be" in blob
+    obs["f4"] = iv["c4"] == "external" and "evil.example.com" not in url
+    created = st == 200 and not errs
+    obs["e2"] = created and iv["c4"] == "absent" and path.rstrip("/").endswith("/app")
     obs["e3"] = created and iv["c4"] == "relative" and path == "/r-theory/book3/"
     if created and iv["c1"] == "new":
         m = re.search(r"perfuser_\d+", uname)
@@ -264,9 +264,9 @@ def _do_login(c, iv):
         return obs
     errs = _errors(body)
     blob = " ".join(errs)
-    obs["f5"] = st == 200 and any(
-        w in blob for w in ("invalid", "incorrect", "unknown", "not found"))
-    obs["f6"] = st == 200 and "password" in blob and path == "/app/login"
+    # One message covers every login failure mode (verified in app.py).
+    obs["f5"] = st == 200 and "invalid username or password" in blob
+    obs["f4"] = iv["c4"] == "external" and "evil.example.com" not in url
     obs["e5"] = path.rstrip("/").endswith("/app") and st == 200 and iv["c4"] == "absent"
     obs["e6"] = path == "/r-theory/book3/" and st == 200
     if "e12" in _wanted():
@@ -279,18 +279,22 @@ def _do_new_thread(c, iv):
     if iv["c5"] == "logged_out":
         st, body, url = c.get("/app/new_thread?category=1")
         obs["f7"] = "login" in url.lower() and "next" in url.lower()
+        if "e12" in _wanted():
+            obs["e12"] = _rtheory_link(body)
         if iv["c9"] == "missing" and iv["c11"] == "yes":
             st2, _, _ = c.post("/app/new_thread?category=1",
                                {"title": "x", "category": "1"})
-            obs["f10"] = st2 in (400, 403) or "login" in _
+            obs["f10"] = st2 in (400, 403)
         return obs
     # logged in
     st, body, url = c.get("/app/new_thread?category=1")
-    obs["e7"] = st == 200 and 'name="title"' in body
     if iv["c11"] == "no":
+        obs["e7"] = st == 200 and 'name="title"' in body
         if "e12" in _wanted():
             obs["e12"] = _rtheory_link(body)
         return obs
+    # c11 == yes: the GET above was setup for the POST's CSRF token;
+    # e7 belongs to the GET case only and is not reported here.
     tok = c.csrf("/app/new_thread?category=1")
     title = {"provided": _unique("PerfThread"), "blank": ""}[iv["c7"]]
     data = {"title": title, "body": "performer body", "category": "1"}
@@ -307,13 +311,60 @@ def _do_new_thread(c, iv):
     return obs
 
 
+_thread_id = [None]
+
+
+def _ensure_thread():
+    """Create one throwaway thread as the performer; return its id.
+
+    The old driver hardcoded tid="1", which does not exist on the live
+    database (verified 2026-09-28), so logged-in comment tests 404'd.
+    """
+    if _thread_id[0]:
+        return _thread_id[0]
+    c = Client()
+    if not _login(c):
+        return None
+    tok = c.csrf("/app/new_thread?category=1")
+    if not tok:
+        return None
+    st, body, url = c.post("/app/new_thread?category=1", {
+        "title": "Performer QA thread", "body": "performer setup body",
+        "category": "1", "csrf_token": tok})
+    m = re.search(r"/app/thread/(\d+)", url)
+    if m:
+        _thread_id[0] = m.group(1)
+    return _thread_id[0]
+
+
 def _do_thread(c, iv):
     obs = {}
-    tid = "1"
+    tid = _ensure_thread()
+    if not tid:
+        return {e: None for e in _wanted()}
+    if iv["c11"] == "no":
+        # GET the public thread page; no comment is posted.
+        st, body, _ = c.get(f"/app/thread/{tid}")
+        if "e12" in _wanted():
+            obs["e12"] = st == 200 and _rtheory_link(body)
+        return obs
     if iv["c5"] == "logged_out":
-        st, body, url = c.post(f"/app/thread/{tid}",
-                               {"body": "hello", "csrf_token": "bad"})
+        data = {"body": "hello"}
+        if iv["c9"] == "valid":
+            # Anonymous visitors still get a session CSRF token, but the
+            # thread page hides its comment form (and token) from them,
+            # so take the token from the login page instead.
+            tok = c.csrf("/app/login")
+            if tok:
+                data["csrf_token"] = tok
+        st, body, url = c.post(f"/app/thread/{tid}", data)
         obs["f8"] = st in (400, 403) or "login" in url.lower()
+        if iv["c9"] == "missing":
+            obs["f10"] = st in (400, 403)
+        elif "e12" in _wanted():
+            # Valid-CSRF anonymous POST lands on the login page, which headers
+            # the R Theory return link. (A 403 page has no header.)
+            obs["e12"] = _rtheory_link(body)
         return obs
     tok = c.csrf(f"/app/thread/{tid}")
     comment = {"valid": _unique("PerfComment body"), "empty": ""}[iv["c6"]]
@@ -327,8 +378,8 @@ def _do_thread(c, iv):
     if iv["c9"] == "missing":
         return obs
     blob = " ".join(_errors(body))
-    obs["f9"] = st == 200 and "empty" in blob
-    obs["e9"] = st == 200 and comment in body
+    obs["f9"] = st == 200 and "reply cannot be empty" in blob
+    obs["e9"] = st == 200 and bool(comment) and comment in body
     if "e12" in _wanted():
         obs["e12"] = _rtheory_link(body)
     return obs
@@ -339,9 +390,7 @@ def _do_search(c, iv):
     q = {"valid": "thread", "empty": ""}[iv["c10"]]
     st, body, _ = c.get("/app/search?q=" + urllib.parse.quote(q))
     obs["e10"] = st == 200 and iv["c10"] == "valid" and "/app/thread/" in body
-    if iv["c9"] == "missing" and iv["c11"] == "yes":
-        # search is GET-based; csrf n/a -> f10 not applicable here
-        obs["f10"] = False
+    # Search is GET-based; f10 (a POST effect) is never applicable here.
     if "e12" in _wanted():
         obs["e12"] = _rtheory_link(body)
     return obs
