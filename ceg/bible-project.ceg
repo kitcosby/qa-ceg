@@ -1,10 +1,32 @@
 # CEG: bible-project — Hebrew database + translation website
 # Repo: cosbykit-afk/bible-project
-# Grounded in website/app.py routes. Public-domain sources only.
+# Grounded in website/app_v2.py routes and schema_v2.sql (v2 normalized corpus).
+# Public-domain sources only.
+#
+# v2 normalization (2026-09-28, commits 937ccc7 + 8e71728):
+# - schema_v2.sql: base tables normalized (words, verses, root_entry/form/vowel,
+#   morph_patterns/segments, strongs_sources, lexicon_* child tables, glosses,
+#   kjv_words, ylt_verses/renderings). bible_v2.db opened READ-ONLY by app_v2.
+# - Derived-data stage (built after migrate; never alters base tables):
+#   build_alignment.py -> word_alignment (836,290 rows; Hebrew/KJV/YLT links);
+#   build_variants.py -> word_variants (528,565 rows; v1-medial vs academic-final);
+#   apply_morph_corrections.py -> morph_variants (28 rows, 12 words; established
+#   corrections re-point words.morph_pattern_id, probable/secondary staged only).
+# - app_v2.py: faithful port of app.py to the v2 corpus. Routes, forms, redirects,
+#   export format, choice-file format unchanged. Queries read normalized tables;
+#   child-table row order preserves v1 blob order so drop-downs render identically.
+# - Word detail (v2) additionally shows: Strong's source (strongs_sources),
+#   YLT verse contexts (lexicon_ylt_context, resolved refs), Found verses
+#   (lexicon_found_verse, resolved refs). Affixes row still from *_disp (U-7).
+# - v2 also fixes the /bible "Books" link bug (mount-prefix aware via SCRIPT_NAME).
+# - Derived tables (word_alignment, word_variants, morph_variants) are NOT yet
+#   surfaced in the website UI; they are build-pipeline outputs, not modeled here.
+# - QA driver (drivers/bible.py) still targets app.py (v1); it needs a v2 port
+#   before the v2 suite can be performed live.
 
 [PAGE]
-Bible website pages: index, book, chapter, verse, choice (POST),
-translations, reading, export, word detail.
+Bible website pages (v2): index, book, chapter, verse, choice (POST),
+translations, reading, export, word detail. Database: bible_v2.db (v2 normalized).
 
 [INPUTS]
 c0 = page : index | book | chapter | verse | choice | translations | reading | export | word
@@ -14,6 +36,9 @@ c3 = choice_submit : no | yes
 c4 = export_format : none | supported | unsupported
 c5 = word_id : invalid | valid
 c6 = affixes_present : no | yes
+c7 = strongs_source_present : no | yes
+c8 = ylt_contexts_present : no | yes
+c9 = found_verses_present : no | yes
 
 [CONSTRAINTS]
 # (page is always selected; no constraint needed — every combination is a real page state)
@@ -47,6 +72,12 @@ e13 = export produces the file in the requested format
 e13 <= c0=export AND c4=supported
 e14 = word detail shows the Affixes row from the normalized disp columns
 e14 <= c0=word AND c5=valid AND c6=yes
+e15 = word detail shows the Strong's source from the normalized strongs_sources table (v2)
+e15 <= c0=word AND c5=valid AND c7=yes
+e16 = word detail shows YLT verse contexts from lexicon_ylt_context with resolved references (v2)
+e16 <= c0=word AND c5=valid AND c8=yes
+e17 = word detail shows found verses from lexicon_found_verse with resolved references (v2)
+e17 <= c0=word AND c5=valid AND c9=yes
 
 [FAIL]
 f1 = book page shows not-found for an invalid reference
@@ -72,3 +103,4 @@ REQ-BB-006 : reading view renders a passage in the chosen translation -> e11, e1
 REQ-BB-007 : export produces the requested supported format and rejects unsupported ones -> e13, f5
 REQ-BB-008 : invalid references show not-found on book, chapter, verse, and reading pages -> f1, f2, f3, f4
 REQ-BB-009 : word detail shows the Affixes row from the normalized disp columns; invalid ids 404 -> e14, f6
+REQ-BB-010 : v2 word detail shows Strong's source, YLT verse contexts, and found verses from normalized child tables -> e15, e16, e17
