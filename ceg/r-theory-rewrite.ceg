@@ -51,6 +51,10 @@ e10 <= c12=on_control
 f1 = empty search blocked with toast, stays on page
 f1 <= c1=present AND c3=empty AND c4=submitted
 f2 = large-text state lost across reload
+# NOTE (2026-09-29): f2 is currently unreachable — M(c6,c5) masks c5 whenever
+# c6 is active, so f2's rule (which needs c5=on AND c6=yes) never fires and no
+# generated group asserts it. The product always persists the toggle to
+# localStorage, so "state lost" is not realizable through the UI anyway.
 f2 <= c5=on AND c6=yes AND c7=no
 f3 = comments panel shows login prompt to logged-out reader
 f3 <= c8=logged_out

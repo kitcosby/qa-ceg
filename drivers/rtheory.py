@@ -33,6 +33,15 @@ _playwright = None
 PERF_USER = "performer_rth"
 PERF_PASS = "PerformerPass123!"
 
+# Chromium for the JS effects. Playwright's bundled chromium is not
+# downloadable here (egress throttles the CDN) and Meta's /opt/meta-chromium
+# build blocks all local-network navigations (ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS).
+# The Puppeteer-cached headless shell works through the SSH tunnel.
+CHROMIUM_PATH = os.environ.get(
+    "QA_CHROMIUM_PATH",
+    "/home/hatch/.cache/puppeteer/chrome-headless-shell/linux-153.0.8010.36"
+    "/chrome-headless-shell-linux64/chrome-headless-shell")
+
 
 def _full(inputs):
     d = dict(DEFAULTS)
@@ -95,7 +104,8 @@ def setup_run(suite):
     global _browser, _playwright
     from playwright.sync_api import sync_playwright
     _playwright = sync_playwright().start()
-    _browser = _playwright.chromium.launch()
+    _browser = _playwright.chromium.launch(
+        executable_path=CHROMIUM_PATH, args=["--no-sandbox"])
 
 
 def teardown_run():
@@ -155,7 +165,11 @@ def _js(iv, want):
     ctx = _browser.new_context()
     try:
         page = ctx.new_page()
-        if iv["c5"] == "on" or iv["c7"] == "yes":
+        # Masking (M(c6,c5) in the CEG): when c6 is active, c5's rules are
+        # skipped by the model, so the toggle action must NOT be performed
+        # and localStorage is pre-seeded only from the c7=yes persisted input.
+        # Pre-seeding on c5=on would invert the e4 toggle click (driver bug).
+        if iv["c7"] == "yes":
             page.add_init_script(
                 "try{localStorage.setItem('rth-large-text','1');}catch(e){}")
         page.goto(BASE + BOOK, wait_until="domcontentloaded", timeout=30000)
@@ -164,16 +178,17 @@ def _js(iv, want):
         if "e1" in want:
             try:
                 page.select_option("#rthSiteDest", "../vol0/")
-                page.wait_for_timeout(1500)
-                obs["e1"] = "/vol0/" in page.url
+                page.wait_for_url(lambda u: "/vol0/" in u, timeout=10000)
+                obs["e1"] = True
             except Exception:  # noqa: BLE001
                 obs["e1"] = False
 
         if "e2" in want:
             try:
                 page.select_option("#rthSiteDest", "../contents/#vol-2")
-                page.wait_for_timeout(1500)
-                obs["e2"] = "contents" in page.url and "vol-2" in page.url
+                page.wait_for_url(lambda u: "contents" in u and "vol-2" in u,
+                                  timeout=10000)
+                obs["e2"] = True
             except Exception:  # noqa: BLE001
                 obs["e2"] = False
 
@@ -181,23 +196,43 @@ def _js(iv, want):
             term = "black holes" if iv["c3"] == "valid" else ""
             page.fill("#rthSearchTerm", term)
             if "e3" in want:
+                # This sandbox has no egress to google.com, so the popup can
+                # never load. Capture the intended navigation URL with a
+                # request listener: e3 is "opens new tab with site: query",
+                # i.e. a new tab is opened for the Google search URL with the
+                # site: query built from the term.
+                nav_urls = []
+                capturing = {"on": True}
+
+                def _rec(req):
+                    if capturing["on"] and "google.com" in req.url:
+                        nav_urls.append(req.url)
+
+                ctx.on("request", _rec)
                 try:
                     with page.expect_popup(timeout=8000) as pop:
                         page.click("#rthSiteSearch button[type=submit]")
                     popup = pop.value
-                    popup.wait_for_timeout(1000)
-                    u = urllib.parse.unquote(popup.url)
-                    obs["e3"] = ("google.com/search" in u and
-                                 "site:cosbykit-afk.github.io/r-theory-rewrite" in u)
+                    popup.wait_for_timeout(800)
                     popup.close()
+                    opened = True
                 except Exception:  # noqa: BLE001
-                    obs["e3"] = False
+                    opened = False
+                finally:
+                    capturing["on"] = False
+                u = urllib.parse.unquote(nav_urls[0]) if nav_urls else ""
+                obs["e3"] = (opened and "google.com/search" in u and
+                             "site:cosbykit-afk.github.io/r-theory-rewrite" in u)
             if "f1" in want:
+                # "stays on page": the blocked submit must not navigate.
+                # Compare against the URL from before the click, since e1/e2
+                # may already have moved us off book3.
+                url_before = page.url
                 page.click("#rthSiteSearch button[type=submit]")
                 page.wait_for_timeout(600)
                 toast = page.text_content("#rthToast") or ""
                 obs["f1"] = ("Enter a search term" in toast
-                             and page.url.rstrip("/").endswith("/book3"))
+                             and page.url == url_before)
 
         if "e4" in want:
             page.click("#rthLargeText")
