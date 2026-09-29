@@ -21,8 +21,13 @@
 # - v2 also fixes the /bible "Books" link bug (mount-prefix aware via SCRIPT_NAME).
 # - Derived tables (word_alignment, word_variants, morph_variants) are NOT yet
 #   surfaced in the website UI; they are build-pipeline outputs, not modeled here.
-# - QA driver (drivers/bible.py) still targets app.py (v1); it needs a v2 port
-#   before the v2 suite can be performed live.
+# - QA driver (drivers/bible.py) ported to app_v2.py + bible_v2.db 2026-09-28.
+# - 2026-09-28 Kit adjudication on export formats: an unrecognized format is
+#   NOT invalid (Kit: possibly highly archaic vowel structures) — the app
+#   must never reject it. New expectation e18: the export flags the format
+#   for further research and still renders the full translation with special
+#   characters displayed. Old f5 ("rejects unsupported format") was a model
+#   error, not a product bug.
 
 [PAGE]
 Bible website pages (v2): index, book, chapter, verse, choice (POST),
@@ -78,6 +83,8 @@ e16 = word detail shows YLT verse contexts from lexicon_ylt_context with resolve
 e16 <= c0=word AND c5=valid AND c8=yes
 e17 = word detail shows found verses from lexicon_found_verse with resolved references (v2)
 e17 <= c0=word AND c5=valid AND c9=yes
+e18 = export with an unrecognized format flags it for research and still renders the translation with special characters displayed
+e18 <= c0=export AND c4=unsupported
 
 [FAIL]
 f1 = book page shows not-found for an invalid reference
@@ -88,8 +95,6 @@ f3 = verse page shows not-found for an invalid reference
 f3 <= c0=verse AND c1=no
 f4 = reading view shows not-found for an invalid reference
 f4 <= c0=reading AND c1=no
-f5 = export rejects an unsupported format
-f5 <= c0=export AND c4=unsupported
 f6 = word detail 404s on an invalid word id
 f6 <= c0=word AND c5=invalid
 
@@ -100,7 +105,7 @@ REQ-BB-003 : verse page renders the text in KJV, YLT, and the custom translation
 REQ-BB-004 : the choice POST switches translation and redirects back -> e7, e8, e9
 REQ-BB-005 : translations page lists and manages translations -> e10
 REQ-BB-006 : reading view renders a passage in the chosen translation -> e11, e12
-REQ-BB-007 : export produces the requested supported format and rejects unsupported ones -> e13, f5
+REQ-BB-007 : export produces the requested format; unrecognized formats are flagged for research and never rejected -> e13, e18
 REQ-BB-008 : invalid references show not-found on book, chapter, verse, and reading pages -> f1, f2, f3, f4
 REQ-BB-009 : word detail shows the Affixes row from the normalized disp columns; invalid ids 404 -> e14, f6
 REQ-BB-010 : v2 word detail shows Strong's source, YLT verse contexts, and found verses from normalized child tables -> e15, e16, e17

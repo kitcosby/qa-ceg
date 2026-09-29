@@ -14,28 +14,28 @@ Rows are grouped by outcome signature: every distinct (success-effects, fail-eff
 | G002 | 768 | page=chapter |  | f2 | REQ-BB-008 |
 | G003 | 768 | page=verse |  | f3 | REQ-BB-008 |
 | G004 | 768 | page=reading |  | f4 | REQ-BB-008 |
-| G005 | 512 | page=export, export_format=unsupported |  | f5 | REQ-BB-007 |
-| G006 | 768 | page=word |  | f6 | REQ-BB-009 |
-| G007 | 1536 |  | e1 |  | REQ-BB-001 |
-| G008 | 1536 | page=translations | e10 |  | REQ-BB-005 |
-| G009 | 192 | page=reading, ref_valid=yes, translation_id=kjv | e11 |  | REQ-BB-006 |
-| G010 | 192 | page=reading, ref_valid=yes, translation_id=ylt | e12 |  | REQ-BB-006 |
-| G011 | 512 | page=export, export_format=supported | e13 |  | REQ-BB-007 |
-| G012 | 48 | page=word, word_id=valid, affixes_present=yes | e14 |  | REQ-BB-009 |
-| G013 | 48 | page=word, word_id=valid, affixes_present=yes, strongs_source_present=yes | e14, e15 |  | REQ-BB-009, REQ-BB-010 |
-| G014 | 48 | page=word, word_id=valid, affixes_present=yes, strongs_source_present=yes, ylt_contexts_present=yes | e14, e15, e16 |  | REQ-BB-009, REQ-BB-010 |
-| G015 | 48 | page=word, word_id=valid, affixes_present=yes, strongs_source_present=yes, ylt_contexts_present=yes, found_verses_present=yes | e14, e15, e16, e17 |  | REQ-BB-009, REQ-BB-010 |
-| G016 | 48 | page=word, word_id=valid, affixes_present=yes, strongs_source_present=yes, found_verses_present=yes | e14, e15, e17 |  | REQ-BB-009, REQ-BB-010 |
-| G017 | 48 | page=word, word_id=valid, affixes_present=yes, ylt_contexts_present=yes | e14, e16 |  | REQ-BB-009, REQ-BB-010 |
-| G018 | 48 | page=word, word_id=valid, affixes_present=yes, ylt_contexts_present=yes, found_verses_present=yes | e14, e16, e17 |  | REQ-BB-009, REQ-BB-010 |
-| G019 | 48 | page=word, word_id=valid, affixes_present=yes, found_verses_present=yes | e14, e17 |  | REQ-BB-009, REQ-BB-010 |
-| G020 | 48 | page=word, word_id=valid, strongs_source_present=yes | e15 |  | REQ-BB-010 |
-| G021 | 48 | page=word, word_id=valid, strongs_source_present=yes, ylt_contexts_present=yes | e15, e16 |  | REQ-BB-010 |
-| G022 | 48 | page=word, word_id=valid, strongs_source_present=yes, ylt_contexts_present=yes, found_verses_present=yes | e15, e16, e17 |  | REQ-BB-010 |
-| G023 | 48 | page=word, word_id=valid, strongs_source_present=yes, found_verses_present=yes | e15, e17 |  | REQ-BB-010 |
-| G024 | 48 | page=word, word_id=valid, ylt_contexts_present=yes | e16 |  | REQ-BB-010 |
-| G025 | 48 | page=word, word_id=valid, ylt_contexts_present=yes, found_verses_present=yes | e16, e17 |  | REQ-BB-010 |
-| G026 | 48 | page=word, word_id=valid, found_verses_present=yes | e17 |  | REQ-BB-010 |
+| G005 | 768 | page=word |  | f6 | REQ-BB-009 |
+| G006 | 1536 |  | e1 |  | REQ-BB-001 |
+| G007 | 1536 | page=translations | e10 |  | REQ-BB-005 |
+| G008 | 192 | page=reading, ref_valid=yes, translation_id=kjv | e11 |  | REQ-BB-006 |
+| G009 | 192 | page=reading, ref_valid=yes, translation_id=ylt | e12 |  | REQ-BB-006 |
+| G010 | 512 | page=export, export_format=supported | e13 |  | REQ-BB-007 |
+| G011 | 48 | page=word, word_id=valid, affixes_present=yes | e14 |  | REQ-BB-009 |
+| G012 | 48 | page=word, word_id=valid, affixes_present=yes, strongs_source_present=yes | e14, e15 |  | REQ-BB-009, REQ-BB-010 |
+| G013 | 48 | page=word, word_id=valid, affixes_present=yes, strongs_source_present=yes, ylt_contexts_present=yes | e14, e15, e16 |  | REQ-BB-009, REQ-BB-010 |
+| G014 | 48 | page=word, word_id=valid, affixes_present=yes, strongs_source_present=yes, ylt_contexts_present=yes, found_verses_present=yes | e14, e15, e16, e17 |  | REQ-BB-009, REQ-BB-010 |
+| G015 | 48 | page=word, word_id=valid, affixes_present=yes, strongs_source_present=yes, found_verses_present=yes | e14, e15, e17 |  | REQ-BB-009, REQ-BB-010 |
+| G016 | 48 | page=word, word_id=valid, affixes_present=yes, ylt_contexts_present=yes | e14, e16 |  | REQ-BB-009, REQ-BB-010 |
+| G017 | 48 | page=word, word_id=valid, affixes_present=yes, ylt_contexts_present=yes, found_verses_present=yes | e14, e16, e17 |  | REQ-BB-009, REQ-BB-010 |
+| G018 | 48 | page=word, word_id=valid, affixes_present=yes, found_verses_present=yes | e14, e17 |  | REQ-BB-009, REQ-BB-010 |
+| G019 | 48 | page=word, word_id=valid, strongs_source_present=yes | e15 |  | REQ-BB-010 |
+| G020 | 48 | page=word, word_id=valid, strongs_source_present=yes, ylt_contexts_present=yes | e15, e16 |  | REQ-BB-010 |
+| G021 | 48 | page=word, word_id=valid, strongs_source_present=yes, ylt_contexts_present=yes, found_verses_present=yes | e15, e16, e17 |  | REQ-BB-010 |
+| G022 | 48 | page=word, word_id=valid, strongs_source_present=yes, found_verses_present=yes | e15, e17 |  | REQ-BB-010 |
+| G023 | 48 | page=word, word_id=valid, ylt_contexts_present=yes | e16 |  | REQ-BB-010 |
+| G024 | 48 | page=word, word_id=valid, ylt_contexts_present=yes, found_verses_present=yes | e16, e17 |  | REQ-BB-010 |
+| G025 | 48 | page=word, word_id=valid, found_verses_present=yes | e17 |  | REQ-BB-010 |
+| G026 | 512 | page=export, export_format=unsupported | e18 |  | REQ-BB-007 |
 | G027 | 768 | page=book, ref_valid=yes | e2 |  | REQ-BB-002 |
 | G028 | 768 | page=chapter, ref_valid=yes | e3 |  | REQ-BB-002 |
 | G029 | 192 | page=verse, ref_valid=yes, translation_id=kjv | e4 |  | REQ-BB-003 |

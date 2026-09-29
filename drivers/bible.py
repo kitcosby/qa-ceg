@@ -1,9 +1,11 @@
 """Bible-project suite driver: performs each outcome group's representative
-case against the Flask app via its test client (in-process, live logic).
+case against the v2 Flask app (website/app_v2.py) via its test client
+(in-process, live logic), reading the normalized bible_v2.db corpus.
 
 app.db is backed up before the run and restored afterwards, so choice/
 translation writes never pollute the real file.
 """
+import html
 import os
 import re
 import shutil
@@ -17,10 +19,12 @@ BACKUP = "/tmp/bible_app.db.bak"
 DEFAULTS = {
     "c0": "index", "c1": "no", "c2": "none", "c3": "no",
     "c4": "none", "c5": "invalid", "c6": "no",
+    "c7": "no", "c8": "no", "c9": "no",
 }
 
 _client = None
 _tid = None  # test translation id
+_BIBLE_DB = None  # corpus path, taken from the imported v2 app module
 
 
 def _full(inputs):
@@ -29,8 +33,13 @@ def _full(inputs):
     return d
 
 
+def _corpus():
+    import sqlite3
+    return sqlite3.connect(_BIBLE_DB)
+
+
 def setup_run(suite):
-    global _client, _tid
+    global _client, _tid, _BIBLE_DB
     if os.path.exists(VENV_SITE) and VENV_SITE not in sys.path:
         sys.path.insert(0, VENV_SITE)
     if os.path.exists(APP_DB):
@@ -49,7 +58,8 @@ def setup_run(suite):
         if not has:
             os.remove(APP_DB)
     sys.path.insert(0, WEB)
-    import app as bible_app
+    import app_v2 as bible_app
+    _BIBLE_DB = bible_app.BIBLE_DB
     bible_app.app.config["TESTING"] = True
     _client = bible_app.app.test_client()
     # create a test translation
@@ -68,23 +78,29 @@ def setup_run(suite):
 
 
 def teardown_run():
-    global _client, _tid
+    global _client, _tid, _BIBLE_DB
+    tid, _tid = _tid, None
     _client = None
-    _tid = None
+    _BIBLE_DB = None
     if os.path.exists(BACKUP):
         shutil.copy2(BACKUP, APP_DB)
         os.remove(BACKUP)
-    # remove choices files for the test translation if any
-    import glob
-    for f in glob.glob(os.path.join(WEB, "user_data", f"translation_{_tid}.choices")):
+    # remove the choices file for the test translation only — never glob
+    # other translations' files
+    if tid is not None:
         try:
-            os.remove(f)
+            os.remove(os.path.join(WEB, "user_data",
+                                   f"translation_{tid}.choices"))
         except OSError:
             pass
 
 
 def _t():
     return f"?t={_tid}"
+
+
+def _wanted(effect, want_success, want_fail):
+    return effect in want_success or effect in want_fail
 
 
 def perform(inputs, want_success, want_fail):
@@ -96,36 +112,45 @@ def perform(inputs, want_success, want_fail):
     if page == "index":
         r = c.get("/")
         body = r.get_data(as_text=True)
-        obs["e1"] = r.status_code == 200 and "Genesis" in body
+        if _wanted("e1", want_success, want_fail):
+            obs["e1"] = r.status_code == 200 and "Genesis" in body
 
     elif page == "book":
         n = 1 if iv["c1"] == "yes" else 999
         r = c.get(f"/book/{n}")
         body = r.get_data(as_text=True)
         if iv["c1"] == "yes":
-            obs["e2"] = r.status_code == 200 and "Chapter 1" in body
+            if _wanted("e2", want_success, want_fail):
+                obs["e2"] = r.status_code == 200 and "Chapter 1" in body
         else:
-            obs["f1"] = (r.status_code == 404 or "not found" in body.lower()
-                         or "unknown" in body.lower()
-                         or "Chapter 1" not in body)
+            if _wanted("f1", want_success, want_fail):
+                obs["f1"] = (r.status_code == 404 or "not found" in body.lower()
+                             or "unknown" in body.lower()
+                             or "Chapter 1" not in body)
 
     elif page == "chapter":
         n, ch = (1, 1) if iv["c1"] == "yes" else (999, 1)
         r = c.get(f"/chapter/{n}/{ch}")
         body = r.get_data(as_text=True)
         if iv["c1"] == "yes":
-            obs["e3"] = r.status_code == 200 and "Verse 1" in body
+            if _wanted("e3", want_success, want_fail):
+                obs["e3"] = r.status_code == 200 and "Verse 1" in body
         else:
-            obs["f2"] = (r.status_code == 404 or "not found" in body.lower()
-                         or "unknown" in body.lower()
-                         or "Verse 1" not in body)
+            if _wanted("f2", want_success, want_fail):
+                obs["f2"] = (r.status_code == 404 or "not found" in body.lower()
+                             or "unknown" in body.lower()
+                             or "Verse 1" not in body)
 
     elif page == "verse":
         n, ch, v = (1, 1, 1) if iv["c1"] == "yes" else (999, 1, 1)
         r = c.get(f"/verse/{n}/{ch}/{v}{_t()}")
         body = r.get_data(as_text=True)
         if iv["c1"] == "no":
-            obs["f3"] = (r.status_code == 404 or "wordbox" not in body)
+            if _wanted("f3", want_success, want_fail):
+                # no words rendered: the wordbox DIV is absent (the CSS
+                # class name is always in the page <style>, so check the div)
+                obs["f3"] = (r.status_code == 404
+                             or '<div class="wordbox"' not in body)
         else:
             # e4/e5/e6: the verse page offers KJV/YLT/custom renderings.
             # "Shows the text in X" = an X rendering is the selected choice.
@@ -137,13 +162,13 @@ def perform(inputs, want_success, want_fail):
                 _set_choice(custom=True)
             r = c.get(f"/verse/{n}/{ch}/{v}{_t()}")
             body = r.get_data(as_text=True)
-            if iv["c2"] == "kjv":
+            if iv["c2"] == "kjv" and _wanted("e4", want_success, want_fail):
                 obs["e4"] = r.status_code == 200 and re.search(
                     r'<option value="\d+" selected>KJV:', body) is not None
-            elif iv["c2"] == "ylt":
+            elif iv["c2"] == "ylt" and _wanted("e5", want_success, want_fail):
                 obs["e5"] = r.status_code == 200 and re.search(
                     r'<option value="\d+" selected>Young', body) is not None
-            elif iv["c2"] == "custom":
+            elif iv["c2"] == "custom" and _wanted("e6", want_success, want_fail):
                 obs["e6"] = "qa-custom-rendering" in body
 
     elif page == "choice":
@@ -161,18 +186,20 @@ def perform(inputs, want_success, want_fail):
                 # pick a KJV (item 1) or YLT item index; find YLT index
                 data["item"] = str(_item_index(wid, which))
             r = c.post(f"/choice{_t()}", data=data)
-            ok = r.status_code == 302 and r.headers.get("Location", "").startswith("/verse/")
-            if iv["c2"] == "kjv":
+            ok = (r.status_code == 302
+                  and r.headers.get("Location", "").startswith("/verse/"))
+            if iv["c2"] == "kjv" and _wanted("e7", want_success, want_fail):
                 obs["e7"] = ok
-            elif iv["c2"] == "ylt":
+            elif iv["c2"] == "ylt" and _wanted("e8", want_success, want_fail):
                 obs["e8"] = ok
-            else:
+            elif iv["c2"] == "custom" and _wanted("e9", want_success, want_fail):
                 obs["e9"] = ok
 
     elif page == "translations":
         r = c.get("/translations")
         body = r.get_data(as_text=True)
-        obs["e10"] = r.status_code == 200 and "New translation" in body
+        if _wanted("e10", want_success, want_fail):
+            obs["e10"] = r.status_code == 200 and "New translation" in body
 
     elif page == "reading":
         n, ch, v = (1, 1, 1) if iv["c1"] == "yes" else (999, 1, 1)
@@ -181,148 +208,192 @@ def perform(inputs, want_success, want_fail):
         r = c.get(f"/reading/{_tid}/{n}/{ch}/{v}")
         body = r.get_data(as_text=True)
         if iv["c1"] == "no":
-            # invalid reference: no words rendered
-            obs["f4"] = r.status_code == 404 or "wordbox" not in body.lower()
+            if _wanted("f4", want_success, want_fail):
+                # invalid reference: no word spans rendered
+                obs["f4"] = r.status_code == 404 or "<span" not in body
         else:
             # reading renders the chosen text for the word we set
+            # (the app html-escapes the rendering, so compare escaped)
             chosen = _chosen_text(which=iv["c2"])
-            has_text = r.status_code == 200 and chosen and chosen in body
-            if iv["c2"] == "kjv":
+            has_text = (r.status_code == 200 and chosen
+                        and html.escape(chosen) in body)
+            if iv["c2"] == "kjv" and _wanted("e11", want_success, want_fail):
                 obs["e11"] = bool(has_text)
-            elif iv["c2"] == "ylt":
+            elif iv["c2"] == "ylt" and _wanted("e12", want_success, want_fail):
                 obs["e12"] = bool(has_text)
 
     elif page == "export":
         if iv["c4"] == "unsupported":
-            # the app has no format parameter; observe whether it rejects one
-            r = c.get(f"/export/{_tid}?format=xyz")
-            body = r.get_data(as_text=True)
-            obs["f5"] = (r.status_code in (400, 404)
-                         or "unsupported" in body.lower()
-                         or "invalid" in body.lower())
+            if _wanted("e18", want_success, want_fail):
+                # Kit 2026-09-28: unrecognized formats are never rejected;
+                # the export flags them for research and still renders the
+                # full translation with special characters displayed
+                r = c.get(f"/export/{_tid}?format=xyz")
+                body = r.get_data(as_text=True)
+                obs["e18"] = (r.status_code == 200
+                              and "flagged for research" in body
+                              and "'xyz'" in body
+                              and "Genesis 1:1" in body)
         else:
-            r = c.get(f"/export/{_tid}")
-            body = r.get_data(as_text=True)
-            obs["e13"] = (r.status_code == 200
-                          and "attachment" in r.headers.get("Content-Disposition", "")
-                          and "Genesis 1:1" in body)
+            if _wanted("e13", want_success, want_fail):
+                r = c.get(f"/export/{_tid}")
+                body = r.get_data(as_text=True)
+                obs["e13"] = (r.status_code == 200
+                              and "attachment" in r.headers.get(
+                                  "Content-Disposition", "")
+                              and "Genesis 1:1" in body)
 
     elif page == "word":
         if iv["c5"] == "valid":
-            wid = _word_with_affixes() if iv["c6"] == "yes" else _first_word_id()
+            wid = _pick_word(affixes=iv["c6"] == "yes",
+                             strongs_source=iv["c7"] == "yes",
+                             ylt_contexts=iv["c8"] == "yes",
+                             found_verses=iv["c9"] == "yes")
             if wid is None:
-                return {e: None for e in list(want_success) + list(want_fail)}
-            r = c.get(f"/word/{wid}{_t()}")
-            body = r.get_data(as_text=True)
-            # e14 wants the Affixes row shown
-            obs["e14"] = r.status_code == 200 and "Affixes" in body
+                for e in list(want_success) + list(want_fail):
+                    obs[e] = None
+            else:
+                r = c.get(f"/word/{wid}{_t()}")
+                body = r.get_data(as_text=True)
+                ok = r.status_code == 200
+                # v2 word detail always renders the rows; the c6..c9 flags
+                # mean the underlying normalized data is present, so each
+                # effect checks its row shows real content, not "(none)".
+                if _wanted("e14", want_success, want_fail):
+                    obs["e14"] = (ok and "Affixes" in body
+                                  and "<th>Affixes</th><td>(none)</td>"
+                                  not in body)
+                if _wanted("e15", want_success, want_fail):
+                    obs["e15"] = (ok and "source:" in body
+                                  and "source: ?" not in body)
+                if _wanted("e16", want_success, want_fail):
+                    obs["e16"] = (ok and "<th>YLT verse contexts</th>"
+                                         "<td>(none)</td>" not in body)
+                if _wanted("e17", want_success, want_fail):
+                    obs["e17"] = (ok and "<th>Found verses</th>"
+                                         "<td>(none)</td>" not in body)
         else:
-            r = c.get(f"/word/999999999{_t()}")
-            body = r.get_data(as_text=True)
-            obs["f6"] = r.status_code == 404 and "Unknown word" in body
+            if _wanted("f6", want_success, want_fail):
+                r = c.get(f"/word/999999999{_t()}")
+                body = r.get_data(as_text=True)
+                obs["f6"] = r.status_code == 404 and "Unknown word" in body
 
     return obs
 
 
 def _first_word_id():
-    import sqlite3
-    con = sqlite3.connect(os.path.join(os.path.dirname(WEB), "bible.db"))
-    # a word with both KJV and YLT renderings so kjv/ylt/custom paths all work
-    # (join matches the app's verse view exactly)
+    """First Gen 1:1 word with both KJV and YLT renderings (v2 child tables)."""
+    con = _corpus()
     r = con.execute(
-        """SELECT w.word_id FROM words w LEFT JOIN lexicon l
-             ON l.root_id=w.root_id AND l.root_form_seq=w.root_form_seq
-                AND l.vowel_seq=w.root_vowel_seq
-           WHERE w.book=1 AND w.chapter=1 AND w.verse=1
-             AND l.kjv_renderings IS NOT NULL AND l.kjv_renderings != ''
-             AND l.ylt_renderings_computed IS NOT NULL
-             AND l.ylt_renderings_computed != ''
+        """SELECT w.word_id FROM words w
+           JOIN verses v ON v.verse_id=w.verse_id
+           WHERE v.book_id=1 AND v.chapter=1 AND v.verse=1
+             AND EXISTS (SELECT 1 FROM lexicon_kjv_rendering k
+                         WHERE k.root_id=w.root_id
+                           AND k.root_form_seq=w.root_form_seq
+                           AND k.vowel_seq=w.root_vowel_seq)
+             AND EXISTS (SELECT 1 FROM lexicon_ylt_rendering y
+                         WHERE y.root_id=w.root_id
+                           AND y.root_form_seq=w.root_form_seq
+                           AND y.vowel_seq=w.root_vowel_seq)
            ORDER BY w.word_pos LIMIT 1""").fetchone()
     if not r:
         r = con.execute(
-            "SELECT word_id FROM words WHERE book=1 AND chapter=1 AND verse=1 "
-            "ORDER BY word_pos LIMIT 1").fetchone()
+            """SELECT w.word_id FROM words w
+               JOIN verses v ON v.verse_id=w.verse_id
+               WHERE v.book_id=1 AND v.chapter=1 AND v.verse=1
+               ORDER BY w.word_pos LIMIT 1""").fetchone()
     con.close()
     return r[0]
 
 
-def _word_with_affixes():
-    """Find a word whose detail page should show the Affixes row."""
-    import sqlite3
-    con = sqlite3.connect(os.path.join(os.path.dirname(WEB), "bible.db"))
-    cols = [r[1] for r in con.execute("PRAGMA table_info(words)")]
-    aff = [c for c in cols if "affix" in c.lower() or "disp" in c.lower()]
-    wid = None
-    if aff:
-        q = f"SELECT word_id FROM words WHERE {' OR '.join(f'{c} IS NOT NULL AND {c} != \"\"' for c in aff[:3])} LIMIT 1"
-        try:
-            r = con.execute(q).fetchone()
-            wid = r[0] if r else None
-        except Exception:  # noqa: BLE001
-            wid = None
+def _pick_word(affixes=False, strongs_source=False,
+               ylt_contexts=False, found_verses=False):
+    """A word satisfying the requested v2 data-presence flags, so the word
+    detail page can show the Affixes row (normalized disp columns),
+    the Strong's source (strongs_sources), YLT contexts
+    (lexicon_ylt_context), and/or found verses (lexicon_found_verse)."""
+    con = _corpus()
+    joins = ""
+    conds = []
+    if affixes:
+        joins += (" JOIN root_form rf ON rf.root_id=w.root_id"
+                  " AND rf.form_seq=w.root_form_seq")
+        cols = ("prefix1_disp", "prefix2_disp", "prefix3_disp",
+                "suffix1_disp", "suffix2_disp")
+        conds.append("(" + " OR ".join(
+            f"(rf.{c} IS NOT NULL AND rf.{c} != '')" for c in cols) + ")")
+    if strongs_source:
+        conds.append("w.strongs_source_id IS NOT NULL")
+    if ylt_contexts:
+        conds.append(
+            "EXISTS (SELECT 1 FROM lexicon_ylt_context c"
+            " WHERE c.root_id=w.root_id"
+            " AND c.root_form_seq=w.root_form_seq"
+            " AND c.vowel_seq=w.root_vowel_seq)")
+    if found_verses:
+        conds.append(
+            "EXISTS (SELECT 1 FROM lexicon_found_verse f"
+            " WHERE f.root_id=w.root_id"
+            " AND f.root_form_seq=w.root_form_seq"
+            " AND f.vowel_seq=w.root_vowel_seq)")
+    q = "SELECT w.word_id FROM words w" + joins
+    if conds:
+        q += " WHERE " + " AND ".join(conds)
+    q += " LIMIT 1"
+    r = con.execute(q).fetchone()
     con.close()
-    return wid
-    import sqlite3
-    con = sqlite3.connect(os.path.join(os.path.dirname(WEB), "bible.db"))
-    r = con.execute(
-        "SELECT word_id FROM words WHERE book=1 AND chapter=1 AND verse=1 "
-        "ORDER BY word_pos LIMIT 1").fetchone()
+    return r[0] if r else None
+
+
+def _rendering_counts(wid):
+    """(nkjv, nylt): dropdown-capped rendering counts for the word's root."""
+    con = _corpus()
+    w = con.execute(
+        "SELECT root_id, root_form_seq, root_vowel_seq FROM words"
+        " WHERE word_id=?", (wid,)).fetchone()
+    nkjv = nylt = 0
+    if w:
+        nkjv = con.execute(
+            "SELECT COUNT(*) FROM lexicon_kjv_rendering"
+            " WHERE root_id=? AND root_form_seq=? AND vowel_seq=?",
+            tuple(w)).fetchone()[0]
+        nylt = con.execute(
+            "SELECT COUNT(*) FROM lexicon_ylt_rendering"
+            " WHERE root_id=? AND root_form_seq=? AND vowel_seq=?",
+            tuple(w)).fetchone()[0]
     con.close()
-    return r[0]
+    # the v2 dropdown takes the first 12 of each list, like v1's [:12]
+    return min(nkjv, 12), min(nylt, 12)
 
 
 def _item_index(wid, which):
-    """Return a dropdown item index for KJV (1) or a YLT option."""
-    import sqlite3
-    con = sqlite3.connect(os.path.join(os.path.dirname(WEB), "bible.db"))
-    r = con.execute(
-        """SELECT l.kjv_renderings, l.ylt_renderings_computed FROM words w
-           LEFT JOIN lexicon l ON l.root_id=w.root_id
-             AND l.root_form_seq=w.root_form_seq
-             AND l.vowel_seq=w.root_vowel_seq
-           WHERE w.word_id=?""", (wid,)).fetchone()
-    con.close()
-    # items: 0=default, 1..=KJV options, then YLT options
-    nkjv = len([t for t in (r[0] or "").split(" | ") if t][:12]) if r else 0
+    """Dropdown item index for KJV (1) or the first YLT option (v2 ordering:
+    default, KJV renderings, Young's renderings, Other options)."""
+    nkjv, nylt = _rendering_counts(wid)
     if which == 2:  # ylt -> first YLT index
-        nylt = len([t for t in (r[1] or "").split(" | ") if t][:12]) if r else 0
         return 1 + nkjv if nylt else 1
     return 1
 
 
 def _chosen_text(which="kjv"):
-    """The rendering text currently chosen for the first Gen 1:1 word."""
-    import sqlite3
+    """The first KJV / Young's rendering for the first Gen 1:1 word."""
     wid = _first_word_id()
-    con = sqlite3.connect(os.path.join(os.path.dirname(WEB), "bible.db"))
-    r = con.execute(
-        """SELECT l.kjv_renderings, l.ylt_renderings_computed FROM words w
-           LEFT JOIN lexicon l ON l.root_id=w.root_id
-             AND l.root_form_seq=w.root_form_seq
-             AND l.vowel_seq=w.root_vowel_seq
-           WHERE w.word_id=?""", (wid,)).fetchone()
+    table = ("lexicon_kjv_rendering" if which == "kjv"
+             else "lexicon_ylt_rendering")
+    con = _corpus()
+    w = con.execute(
+        "SELECT root_id, root_form_seq, root_vowel_seq FROM words"
+        " WHERE word_id=?", (wid,)).fetchone()
+    txt = None
+    if w:
+        r = con.execute(
+            f"SELECT rendering FROM {table}"
+            " WHERE root_id=? AND root_form_seq=? AND vowel_seq=?"
+            " ORDER BY seq LIMIT 1", tuple(w)).fetchone()
+        txt = r[0] if r else None
     con.close()
-    if not r:
-        return None
-    src = r[0] if which == "kjv" else r[1]
-    parts = [t for t in (src or "").split(" | ") if t][:12]
-    return parts[0] if parts else None
-    """Return a dropdown item index for KJV (1) or a YLT option."""
-    import sqlite3
-    con = sqlite3.connect(os.path.join(os.path.dirname(WEB), "bible.db"))
-    r = con.execute(
-        """SELECT l.kjv_renderings, l.ylt_renderings_computed FROM words w
-           LEFT JOIN lexicon l ON l.root_id=w.root_id
-             AND l.root_form_seq=w.root_form_seq
-             AND l.vowel_seq=w.root_vowel_seq
-           WHERE w.word_id=?""", (wid,)).fetchone()
-    con.close()
-    # items: 0=default, 1..=KJV options, then YLT options
-    nkjv = len([t for t in (r[0] or "").split(" | ") if t][:12]) if r else 0
-    if which == 2:  # ylt -> first YLT index
-        nylt = len([t for t in (r[1] or "").split(" | ") if t][:12]) if r else 0
-        return 1 + nkjv if nylt else 1
-    return 1
+    return txt
 
 
 def _set_choice(custom=False, which="kjv"):
