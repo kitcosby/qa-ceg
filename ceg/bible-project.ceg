@@ -1,5 +1,5 @@
 # CEG: bible-project — Hebrew database + translation website
-# Repo: cosbykit-afk/bible-project
+# Repo: kitcosby/bible-project (public; originally cosbykit-afk/bible-project)
 # Grounded in website/app_v2.py routes and schema_v2.sql (v2 normalized corpus).
 # Public-domain sources only.
 #
@@ -19,22 +19,73 @@
 #   YLT verse contexts (lexicon_ylt_context, resolved refs), Found verses
 #   (lexicon_found_verse, resolved refs). Affixes row still from *_disp (U-7).
 # - v2 also fixes the /bible "Books" link bug (mount-prefix aware via SCRIPT_NAME).
-# - Derived tables (word_alignment, word_variants, morph_variants) are NOT yet
-#   surfaced in the website UI; they are build-pipeline outputs, not modeled here.
+# - Derived tables (word_alignment, morph_variants) are NOT yet surfaced in the
+#   website UI; they are build-pipeline outputs, not modeled here.
+# - word_variants IS now surfaced: /variants route (2026-09-30) — Hebrew word
+#   drop-down + search box, variant readings table per word (528,565 rows,
+#   all variant_kind='spelling' so far; witness/variant_type columns ready).
+# - Interlinear view (2026-09-30, Kit-approved wireframe): /interlinear/<b>/<c>/<v>
+#   — Hebrew words in Hebrew order (RTL) each with variant + translation
+#   drop-downs; English sentence below in KJV word order from word_alignment /
+#   kjv_words, KJV words with no Hebrew alignment italicized (KJV print
+#   convention); dynamic Book/Chapter/Verse drop-downs via /api/*; Prev/Next
+#   verse links roll over chapter and book boundaries; word detail page gains
+#   a Bibliomancy section listing every verse using the word form.
 # - QA driver (drivers/bible.py) ported to app_v2.py + bible_v2.db 2026-09-28.
-# - 2026-09-28 Kit adjudication on export formats: an unrecognized format is
+# - 2026-09-30 Kit adjudication on export formats: an unrecognized format is
 #   NOT invalid (Kit: possibly highly archaic vowel structures) — the app
 #   must never reject it. New expectation e18: the export flags the format
 #   for further research and still renders the full translation with special
 #   characters displayed. Old f5 ("rejects unsupported format") was a model
 #   error, not a product bug.
+# - Clean reading view (2026-09-30, Kit): /reading/<tid>/<b>/<c>/<v> is now
+#   NOTHING but the English translation as exported — no interlinear, no
+#   drop-downs, no Hebrew spans, no navigation chrome. Unknown verses 404.
+# - User accounts (2026-09-30, Kit): user_accounts table (salted password
+#   hashes, never cleartext); /signup, /login, /logout; translations created
+#   while logged in record owner_id. Kit's translation-source integer is
+#   recorded on lemma_default: 1=KJV, 2=Young's, 3=user-defined (source 3
+#   links to other_option via other_option_id).
+# - Variant de-dup (2026-09-30, Kit): the v1-medial vs academic-final rows
+#   are NOT real manuscript variance — dirty data from the study tool, which
+#   ignored special characters for end-of-word letterforms. Rows differing
+#   ONLY by medial/final letterforms (fold_finals) are folded away and never
+#   baked into the UI. Kit 2026-10-01: v1 data-artifact rows (basis marking
+#   anomaly= or ARTIFACT) are excluded from variant display entirely — only
+#   academic/textual manuscript variants count. No textual rows are loaded
+#   yet, so the /variants drop-down is empty with an explanatory note until
+#   real apparatus data arrives. Words with no real variance show "none"
+#   instead of the drop-down (interlinear).
+# - DB QA applications (2026-11-11, Kit-approved; issues #20/#21/#23):
+#   verse-grid repair refiled 92 misfiled words to their true verses
+#   (Esth 4:4, Ps 17:1, Isa 27:1, Jer 28:1, Lam 2:1 filled); 18 exact
+#   Strong's fills applied (blank Strong's now 4,321 in both stores);
+#   split_multi_strongs resolved as COMPOSITE values in words.strongs
+#   (comma-joined in maqqef-chain order, components in strongs_components,
+#   source oshb-split; 135 words) — new cause c19 / effect e41;
+#   PARALLEL-CONFLATE distribution pass on ylt_renderings (357,574 rows;
+#   shared YLT positions 11,448 -> 10,642); local corpus and production
+#   PostgreSQL verified in full content-hash parity (words, YLT,
+#   word_alignment, lexicon_ylt_rendering).
+# - Hidden verse shells (2026-11-11, Kit ruled "leave the rows but hide
+#   them"): the 7 verse rows emptied by the grid repair (Ps 17:17,
+#   Isa 27:22, Jer 28:23, Lam 2:23, Josh 4:32, 2 Chr 36:32, Ruth 8:18)
+#   are KEPT in the grid (each retains its Peshitta no_counterpart note)
+#   and flagged verses.hidden = 1 in schema_v2.sql and both stores.
+#   app_v2 honors the flag in the shared _WORDS_EXIST fragment, the HTML
+#   book/chapter listings, and the read-view navigation helpers
+#   (_chapter_bounds, _last_chapter) — new cause c18 / effects e40, f11.
+#   Verified live in production 2026-11-11: /api/chapters/8 = [1,2,3,4],
+#   /api/verse/19/17/17 = 404, /api/verses/19/17 = 1..15, read view for
+#   Ruth 4 offers no chapter-8 navigation.
 
 [PAGE]
 Bible website pages (v2): index, book, chapter, verse, choice (POST),
-translations, reading, export, word detail. Database: bible_v2.db (v2 normalized).
+translations, reading, export, word detail, variants, interlinear, signup,
+login. Database: bible_v2.db (v2 normalized).
 
 [INPUTS]
-c0 = page : index | book | chapter | verse | choice | translations | reading | export | word
+c0 = page : index | book | chapter | verse | choice | translations | reading | export | word | variants | interlinear | signup | login
 c1 = ref_valid : no | yes
 c2 = translation_id : none | kjv | ylt | custom
 c3 = choice_submit : no | yes
@@ -44,6 +95,16 @@ c6 = affixes_present : no | yes
 c7 = strongs_source_present : no | yes
 c8 = ylt_contexts_present : no | yes
 c9 = found_verses_present : no | yes
+c10 = variant_search : empty | text
+c11 = variant_word : none | valid | invalid
+c12 = variants_present : no | yes
+c13 = nav_dynamic : no | yes
+c14 = verse_edge : first | middle | last
+c15 = bibliomancy : none | listed
+c16 = auth : logged_out | logged_in
+c17 = credentials : right | wrong
+c18 = verse_hidden : no | yes
+c19 = strongs_form : single | composite
 
 [CONSTRAINTS]
 # (page is always selected; no constraint needed — every combination is a real page state)
@@ -85,6 +146,60 @@ e17 = word detail shows found verses from lexicon_found_verse with resolved refe
 e17 <= c0=word AND c5=valid AND c9=yes
 e18 = export with an unrecognized format flags it for research and still renders the translation with special characters displayed
 e18 <= c0=export AND c4=unsupported
+e19 = variants page shows the Hebrew word drop-down (empty with an explanatory
+      note until academic/textual variants are loaded; v1 data-artifact rows
+      excluded per Kit 2026-10-01)
+e19 <= c0=variants
+e20 = search filters the drop-down to matching Hebrew words
+e20 <= c0=variants AND c10=text
+e21 = selecting a valid word with variants shows its variant readings table
+e21 <= c0=variants AND c11=valid AND c12=yes
+e22 = index page links to the variants page
+e22 <= c0=index
+e23 = interlinear page renders the verse's Hebrew words in Hebrew order, each with a translation drop-down and, where the word has real variants, a variant drop-down
+e23 <= c0=interlinear AND c1=yes
+e24 = interlinear nav offers Book/Chapter/Verse drop-downs; the chapter list follows the book and the verse list follows the chapter (via /api/*)
+e24 <= c0=interlinear AND c1=yes AND c13=yes
+e25a = at the first verse of a chapter, the Prev link rolls back to the last verse of the previous chapter (or previous book)
+e25a <= c0=interlinear AND c1=yes AND c14=first
+e25b = at the last verse of a chapter, the Next link rolls forward to the first verse of the next chapter (or next book)
+e25b <= c0=interlinear AND c1=yes AND c14=last
+e26 = word detail lists every verse using the word, each linking to its verse page (bibliomancy)
+e26 <= c0=word AND c5=valid AND c15=listed
+e27 = interlinear page renders the English sentence in English (KJV) word order with supplied words italicized
+e27 <= c0=interlinear AND c1=yes
+e28 = saving a non-default choice records the rendering as the lemma default (Strong's-keyed) for subsequent occurrences of the same word
+e28 <= c0=choice AND c3=yes AND c2=kjv
+e29 = a later occurrence of the same word shows the propagated choice selected with no explicit per-word save
+e29 <= c0=verse AND c1=yes AND c2=kjv
+e30 = reading view shows only the English translation text: no Hebrew spans, no drop-downs, no navigation chrome
+e30 <= c0=reading AND c1=yes AND c2=kjv
+e31 = signup creates the account and logs the user in
+e31 <= c0=signup
+e32 = login with correct credentials authenticates the user
+e32 <= c0=login AND c17=right
+e33 = translations created while logged in are owned by that user
+e33 <= c0=translations AND c16=logged_in
+e34a = saving a KJV choice records translation source 1 (KJV) on the lemma default
+e34a <= c0=choice AND c3=yes AND c2=kjv
+e34b = saving a Young's choice records translation source 2 (Young's) on the lemma default
+e34b <= c0=choice AND c3=yes AND c2=ylt
+e34c = saving a user-defined choice records translation source 3 (user-defined) on the lemma default, linked to other_option
+e34c <= c0=choice AND c3=yes AND c2=custom
+e35 = words with no real variants show "none" instead of a variant drop-down; words with real variants keep the drop-down
+e35 <= c0=interlinear AND c1=yes
+e36 = every standard page (index, book, chapter, verse, word, variants, translations, interlinear, signup, login) references the papyrus tile background
+e36 <= c0=index
+e37 = the variants drop-down lists only words having two or more distinct variant readings after medial/final letterform folding
+e37 <= c0=variants
+e38 = a word's KJV drop-down options are the lemma's distinct full KJV phrases, one option per phrase with this verse's phrase first, never split into separate words
+e38 <= c0=verse AND c1=yes AND c2=kjv
+e39 = a word's Young's drop-down options are the lemma's distinct full Young's phrases, one option per phrase with this verse's phrase first, never split into separate words
+e39 <= c0=verse AND c1=yes AND c2=ylt
+e40 = listings and read navigation omit hidden verses: chapter lists contain no chapter whose verses are all hidden (Ruth offers chapters 1-4 only), verse lists exclude hidden verses, and Prev/Next navigation never lands on a hidden verse
+e40 <= c18=yes
+e41 = a composite Strong's entry (comma-joined maqqef chain, e.g. H853,H3605,H834) resolves on its own word page by exact match as a single lemma; its components do not individually claim the word
+e41 <= c0=word AND c5=valid AND c19=composite
 
 [FAIL]
 f1 = book page shows not-found for an invalid reference
@@ -97,6 +212,16 @@ f4 = reading view shows not-found for an invalid reference
 f4 <= c0=reading AND c1=no
 f6 = word detail 404s on an invalid word id
 f6 <= c0=word AND c5=invalid
+f7 = variants page shows "Unknown word id" for a nonexistent word id
+f7 <= c0=variants AND c11=invalid
+f8 = variants page shows "No variants recorded" for a word with no variants
+f8 <= c0=variants AND c11=valid AND c12=no
+f9 = interlinear page shows not-found for an invalid reference
+f9 <= c0=interlinear AND c1=no
+f10 = login with wrong credentials is rejected
+f10 <= c0=login AND c17=wrong
+f11 = a hidden verse shows not-found on verse, interlinear, and reading pages, and /api/verse returns 404 {"error": "not found"} for it, exactly as for an invalid reference
+f11 <= c18=yes
 
 [REQUIREMENTS]
 REQ-BB-001 : index lists the books -> e1
@@ -104,8 +229,17 @@ REQ-BB-002 : book and chapter pages list chapters and verses for valid reference
 REQ-BB-003 : verse page renders the text in KJV, YLT, and the custom translation -> e4, e5, e6
 REQ-BB-004 : the choice POST switches translation and redirects back -> e7, e8, e9
 REQ-BB-005 : translations page lists and manages translations -> e10
-REQ-BB-006 : reading view renders a passage in the chosen translation -> e11, e12
+REQ-BB-006 : reading view renders a passage in the chosen translation, showing only the English text -> e11, e12, e30
 REQ-BB-007 : export produces the requested format; unrecognized formats are flagged for research and never rejected -> e13, e18
 REQ-BB-008 : invalid references show not-found on book, chapter, verse, and reading pages -> f1, f2, f3, f4
 REQ-BB-009 : word detail shows the Affixes row from the normalized disp columns; invalid ids 404 -> e14, f6
 REQ-BB-010 : v2 word detail shows Strong's source, YLT verse contexts, and found verses from normalized child tables -> e15, e16, e17
+REQ-BB-011 : variants page offers the Hebrew word drop-down (only words with two or more distinct variant readings) with search, shows variant readings for a selected word, and handles unknown/empty cases; index links to it -> e19, e20, e21, e22, e37, f7, f8
+REQ-BB-012 : interlinear page shows each Hebrew word with translation and (where real) variant drop-downs, dynamic Book/Chapter/Verse navigation, Prev/Next rollover across chapter and book boundaries, the English sentence in English word order with supplied words italicized, words with no real variance show "none", and invalid references show not-found; word detail lists every verse using the word (bibliomancy) -> e23, e24, e25a, e25b, e26, e27, e35, f9
+REQ-BB-013 : a non-default choice becomes the new lemma default (Strong's-keyed, forward-only) for the rest of the text: the choice POST records it and later occurrences of the same word render it -> e28, e29
+REQ-BB-014 : user accounts: signup creates the account and logs the user in; login authenticates with correct credentials and rejects wrong ones; translations created while logged in are owned by that user -> e31, e32, f10, e33
+REQ-BB-015 : the choice POST records Kit's translation-source integer on the lemma default: 1=KJV, 2=Young's, 3=user-defined (linked to other_option) -> e34a, e34b, e34c
+REQ-BB-016 : site-wide papyrus visual theme: every standard page references the papyrus tile background -> e36
+REQ-BB-017 : translation drop-downs offer each source's full per-occurrence phrases as single choices, one option per phrase, never split across lines -> e38, e39
+REQ-BB-018 : verses flagged hidden (verses.hidden = 1; the 7 emptied grid-repair shells, Kit 2026-11-11) are retained in the data but never render: not-found on verse/interlinear/reading and via the API, and absent from chapter/verse listings and read navigation -> e40, f11
+REQ-BB-019 : composite Strong's values (maqqef chains) are first-class lemmas: stored comma-joined in words.strongs with components in strongs_components (source oshb-split), and their word pages resolve by exact match -> e41
