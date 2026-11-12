@@ -66,6 +66,13 @@ Multiple rules may set the same effect (separate success paths stay in
 reach for one, you are holding an O, an I, or an unconstrained
 bifurcation. Name it.
 
+## Standing hold (Kit, 2026-11-12)
+
+The paradigm cleanup comes before any further cause-effect graph
+generation: no new .ceg graphs are authored and no suites are
+regenerated until the cleanup is recorded DONE (GPT queue task
+CEG-PARADIGM-CLEANUP) or Kit lifts the hold directly.
+
 ## Kit's authoring lesson (2026-11-12)
 
 How a proper .ceg is authored, in Kit's words as dictated and decoded
