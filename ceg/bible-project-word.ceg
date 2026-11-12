@@ -1,0 +1,49 @@
+# CEG: bible-project-word — word detail branch
+# Branch of bible-project.ceg (root split, 2026-11-12, Kit's authoring
+# lesson): single-page branch, so the page input itself is dropped —
+# every state in this file is the word page. Product documentation
+# lives in bible-project.ceg's header.
+
+[PAGE]
+Bible website page (v2): word detail.
+
+[INPUTS]
+c5 = word_id : invalid | valid
+c6 = affixes_present : no | yes
+c7 = strongs_source_present : no | yes
+c8 = ylt_contexts_present : no | yes
+c9 = found_verses_present : no | yes
+c15 = bibliomancy : none | listed
+c19 = strongs_form : single | composite
+
+[CONSTRAINTS]
+R(c15, c5)
+# The Bibliomancy list only exists on a rendered word page: bibliomancy
+# active (listed) requires word_id active (valid). The remaining fields
+# are independent presence flags on the one page — inclusive by nature,
+# each demonstrated in combination rather than permuted against foreign
+# pages (there are none in this branch).
+
+[SUCCESS]
+e14 = word detail shows the Affixes row from the normalized disp columns
+e14 <= c5=valid AND c6=yes
+e15 = word detail shows the Strong's source from the normalized strongs_sources table (v2)
+e15 <= c5=valid AND c7=yes
+e16 = word detail shows YLT verse contexts from lexicon_ylt_context with resolved references (v2)
+e16 <= c5=valid AND c8=yes
+e17 = word detail shows found verses from lexicon_found_verse with resolved references (v2)
+e17 <= c5=valid AND c9=yes
+e26 = word detail lists every verse using the word, each linking to its verse page (bibliomancy)
+e26 <= c5=valid AND c15=listed
+e41 = a composite Strong's entry (comma-joined maqqef chain, e.g. H853,H3605,H834) resolves on its own word page by exact match as a single lemma; its components do not individually claim the word
+e41 <= c5=valid AND c19=composite
+
+[FAIL]
+f6 = word detail 404s on an invalid word id
+f6 <= c5=invalid
+
+[REQUIREMENTS]
+REQ-BB-009 : word detail shows the Affixes row from the normalized disp columns; invalid ids 404 -> e14, f6
+REQ-BB-010 : v2 word detail shows Strong's source, YLT verse contexts, and found verses from normalized child tables -> e15, e16, e17
+REQ-BB-012 : word detail lists every verse using the word (bibliomancy) (interlinear halves in bible-project-interlinear.ceg) -> e26
+REQ-BB-019 : composite Strong's values (maqqef chains) are first-class lemmas: stored comma-joined in words.strongs with components in strongs_components (source oshb-split), and their word pages resolve by exact match -> e41

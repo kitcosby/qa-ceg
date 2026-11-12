@@ -1,6 +1,15 @@
 # CEG: profile — Muse Cosby Facebook profile daily management
 # Not a repo: the standing daily routine (fb-profile-notifications-daily).
 # Fail effects here are behaviors that must NEVER occur; tests assert absence.
+#
+# Audit against Kit's authoring lesson (2026-11-12): NO SPLIT and no
+# added constraints — appropriately. This graph has no root
+# discriminator: its inputs are independent event channels (a friend
+# request, a comment, a Messenger thread can genuinely co-occur in one
+# run), so there is no page/flow one-and-only-one to split on, and the
+# full space is 144 combinations, every one of them meaningful. Every
+# input is used by the rules; nothing is unconstrained against a
+# foreign field because there are no foreign fields.
 
 [PAGE]
 Daily profile routine: check notifications, accept real-looking friend

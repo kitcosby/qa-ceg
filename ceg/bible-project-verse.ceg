@@ -1,0 +1,80 @@
+# CEG: bible-project-verse — verse / choice / reading / export branch
+# Branch of bible-project.ceg (root split, 2026-11-12, Kit's authoring
+# lesson): the page one-and-only-one splits the graph; this branch carries
+# the four pages whose inputs interlock around the translation choice.
+# Product documentation lives in bible-project.ceg's header.
+
+[PAGE]
+Bible website pages (v2): verse, choice (POST), reading, export.
+
+[INPUTS]
+c0 = page : verse | choice | reading | export
+c1 = ref_valid : no | yes
+c2 = translation_id : none | kjv | ylt | custom
+c3 = choice_submit : no | yes
+c4 = export_format : none | supported | unsupported
+c18 = verse_hidden : no | yes
+
+[CONSTRAINTS]
+R(c3, c2)
+# A choice POST only exists with a translation chosen: choice_submit
+# active requires translation_id active (never none). Every other field
+# is one-and-only-one by construction (a single page, a single
+# translation, a single export format per state).
+
+[SUCCESS]
+e4 = verse page shows the text in KJV
+e4 <= c0=verse AND c1=yes AND c2=kjv
+e5 = verse page shows the text in YLT
+e5 <= c0=verse AND c1=yes AND c2=ylt
+e6 = verse page shows the text in the custom translation
+e6 <= c0=verse AND c1=yes AND c2=custom
+e7 = choice POST sets the translation and redirects back
+e7 <= c0=choice AND c3=yes AND c2=kjv
+e8 = choice POST sets the translation and redirects back
+e8 <= c0=choice AND c3=yes AND c2=ylt
+e9 = choice POST sets the translation and redirects back
+e9 <= c0=choice AND c3=yes AND c2=custom
+e11 = reading view renders the passage in the chosen translation
+e11 <= c0=reading AND c1=yes AND c2=kjv
+e12 = reading view renders the passage in the chosen translation
+e12 <= c0=reading AND c1=yes AND c2=ylt
+e13 = export produces the file in the requested format
+e13 <= c0=export AND c4=supported
+e18 = export with an unrecognized format flags it for research and still renders the translation with special characters displayed
+e18 <= c0=export AND c4=unsupported
+e28 = saving a non-default choice records the rendering as the lemma default (Strong's-keyed) for subsequent occurrences of the same word
+e28 <= c0=choice AND c3=yes AND c2=kjv
+e29 = a later occurrence of the same word shows the propagated choice selected with no explicit per-word save
+e29 <= c0=verse AND c1=yes AND c2=kjv
+e30 = reading view shows only the English translation text: no Hebrew spans, no drop-downs, no navigation chrome
+e30 <= c0=reading AND c1=yes AND c2=kjv
+e34a = saving a KJV choice records translation source 1 (KJV) on the lemma default
+e34a <= c0=choice AND c3=yes AND c2=kjv
+e34b = saving a Young's choice records translation source 2 (Young's) on the lemma default
+e34b <= c0=choice AND c3=yes AND c2=ylt
+e34c = saving a user-defined choice records translation source 3 (user-defined) on the lemma default, linked to other_option
+e34c <= c0=choice AND c3=yes AND c2=custom
+e38 = a word's KJV drop-down options are the lemma's distinct full KJV phrases, one option per phrase with this verse's phrase first, never split into separate words
+e38 <= c0=verse AND c1=yes AND c2=kjv
+e39 = a word's Young's drop-down options are the lemma's distinct full Young's phrases, one option per phrase with this verse's phrase first, never split into separate words
+e39 <= c0=verse AND c1=yes AND c2=ylt
+
+[FAIL]
+f3 = verse page shows not-found for an invalid reference
+f3 <= c0=verse AND c1=no
+f4 = reading view shows not-found for an invalid reference
+f4 <= c0=reading AND c1=no
+f11 = a hidden verse shows not-found on verse, interlinear, and reading pages, and /api/verse returns 404 {"error": "not found"} for it, exactly as for an invalid reference
+f11 <= c18=yes
+
+[REQUIREMENTS]
+REQ-BB-003 : verse page renders the text in KJV, YLT, and the custom translation -> e4, e5, e6
+REQ-BB-004 : the choice POST switches translation and redirects back -> e7, e8, e9
+REQ-BB-006 : reading view renders a passage in the chosen translation, showing only the English text -> e11, e12, e30
+REQ-BB-007 : export produces the requested format; unrecognized formats are flagged for research and never rejected -> e13, e18
+REQ-BB-008 : invalid references show not-found on book, chapter, verse, and reading pages (book and chapter halves in bible-project.ceg) -> f3, f4
+REQ-BB-013 : a non-default choice becomes the new lemma default (Strong's-keyed, forward-only) for the rest of the text: the choice POST records it and later occurrences of the same word render it -> e28, e29
+REQ-BB-015 : the choice POST records Kit's translation-source integer on the lemma default: 1=KJV, 2=Young's, 3=user-defined (linked to other_option) -> e34a, e34b, e34c
+REQ-BB-017 : translation drop-downs offer each source's full per-occurrence phrases as single choices, one option per phrase, never split across lines -> e38, e39
+REQ-BB-018 : verses flagged hidden are retained in the data but never render: not-found on verse/interlinear/reading and via the API (listing half in bible-project.ceg, interlinear half in bible-project-interlinear.ceg) -> f11

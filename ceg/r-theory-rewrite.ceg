@@ -1,5 +1,11 @@
 # CEG: r-theory-rewrite — R Theory public website (book pages)
 # Repo: cosbykit-afk/r-theory-rewrite | Live: Toetop :80 /var/www/r-theory
+#
+# Audit against Kit's authoring lesson (2026-11-12): already in style,
+# unchanged. A single page (no root split applies); its fields are
+# constrained where the product constrains them (R: search submit,
+# login next, and dropdown choice each require the nav bar; M: reload
+# masks the large-text toggle), and every input is used.
 
 [PAGE]
 Book page (sitebar nav, breadcrumb, dropdown, search, large-text toggle,

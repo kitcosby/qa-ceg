@@ -1,0 +1,25 @@
+# CEG: lampy-installer-repair — repair flow branch
+# Branch of lampy-installer.ceg (root split, 2026-11-12, Kit's
+# authoring lesson): the flow one-and-only-one splits the graph; this
+# branch carries the repair flow and its single deciding input.
+
+[PAGE]
+Installer flow: repair. Grounded in install.ps1 (v1.1.10 corrections
+in lampy-installer.ceg's header).
+
+[INPUTS]
+c3 = existing_install : no | yes
+
+[CONSTRAINTS]
+# The repair flow turns on exactly one fact — whether a distro already
+# exists. One input, two states, both demonstrated.
+
+[SUCCESS]
+e3 = repair with existing distro skips download and import, re-runs configuration (v1.1.10)
+e3 <= c3=yes
+e10 = repair without an existing distro downloads the bundle and imports fresh
+e10 <= c3=no
+
+[REQUIREMENTS]
+REQ-LI-003 : repair with existing distro skips download and import, re-runs config -> e3
+REQ-LI-004 : repair without an existing distro downloads and imports fresh (never refuses) -> e10

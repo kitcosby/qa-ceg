@@ -1,4 +1,4 @@
-# CEG: lampy-installer — Lampy full installer
+# CEG: lampy-installer — Lampy full installer, install branch (root)
 # Repo: cosbykit-afk/lampy-installer
 # Standing: the installer must keep working for everybody else and for
 # future releases — never hardcoded to Kit's machine or the current release.
@@ -20,61 +20,48 @@
 # - Edge: if WSL itself is not installed, install.ps1 throws and asks for a
 #   one-time admin run to enable the WSL feature. That is a precondition
 #   failure, not a modeled flow variable.
+#
+# ROOT SPLIT (2026-11-12, Kit's authoring lesson — see CEG_FORMAT.md):
+# This file is the ROOT branch (install flow). The graph opens with a
+# big one-and-only-one — the flow — that splits: each branch generates
+# on its own with only its own inputs, instead of one cross-product of
+# all 9 inputs (2,880 combinations). Branches: lampy-installer.ceg
+# (install), lampy-installer-repair.ceg, lampy-installer-uninstall.ceg,
+# lampy-installer-verify.ceg, lampy-installer-passwords.ceg. The flow
+# input itself is dropped inside each branch — every state in a branch
+# file is that flow. Requirement ids keep their REQ-LI numbers in
+# whichever branch carries them.
 
 [PAGE]
-Installer flows: install (fresh/upgrade), repair, uninstall,
-verify-bundle, set-passwords. Grounded in install.ps1, uninstall.ps1,
-lampy.nsi / lampy-slim.nsi, verify-bundle.py, set-passwords.py.
+Installer flow: install (fresh/upgrade). Grounded in install.ps1,
+lampy.nsi / lampy-slim.nsi. Sibling branches cover repair, uninstall,
+verify-bundle, set-passwords.
 
 [INPUTS]
-c1 = flow : install | repair | uninstall | verify | passwords
 c2 = bundle_present : no | yes
 c3 = existing_install : no | yes
 c5 = bundle_hash : match | mismatch
 c6 = target_dir : missing | empty | occupied
 c7 = user_data : absent | present
-c8 = passwords_set : no | yes
-c9 = confirm : no | yes
-c10 = scheduled_task : absent | this_distro | other_distro
 
 [CONSTRAINTS]
+# Only the install flow's own inputs are present; each is a real,
+# independent fact about the target machine (bundle on hand, prior
+# install, hash state, directory state, user data) — the flow split
+# itself is the constraint.
 
 [SUCCESS]
 e1 = fresh install completes and services register
-e1 <= c1=install AND c2=yes AND c3=no AND c5=match AND c6=empty
+e1 <= c2=yes AND c3=no AND c5=match AND c6=empty
 e2 = upgrade install completes and existing user data is preserved
-e2 <= c1=install AND c2=yes AND c3=yes AND c5=match AND c7=present
-e3 = repair with existing distro skips download and import, re-runs configuration (v1.1.10)
-e3 <= c1=repair AND c3=yes
-e5 = uninstall removes distro, install dir, and its own scheduled task on confirmation (v1.1.10)
-e5 <= c1=uninstall AND c9=yes AND c10=this_distro
-e6 = verify-bundle passes when every hash matches the manifest
-e6 <= c1=verify AND c5=match
-e7 = set-passwords writes fresh credentials
-e7 <= c1=passwords AND c8=no
-e8 = uninstall removes distro and install dir but leaves a foreign scheduled task (v1.1.10 safety)
-e8 <= c1=uninstall AND c9=yes AND c10=other_distro
-e9 = uninstall removes distro and install dir when no scheduled task exists
-e9 <= c1=uninstall AND c9=yes AND c10=absent
-e10 = repair without an existing distro downloads the bundle and imports fresh
-e10 <= c1=repair AND c3=no
+e2 <= c3=yes AND c2=yes AND c5=match AND c7=present
 
 [FAIL]
 f2 = fresh install refuses an occupied directory that is not an install
-f2 <= c1=install AND c3=no AND c6=occupied
-f3 = verify-bundle fails on hash mismatch
-f3 <= c1=verify AND c5=mismatch
-f4 = uninstall aborts on missing confirmation (distro and data left untouched)
-f4 <= c1=uninstall AND c9=no
+f2 <= c3=no AND c6=occupied
 
 [REQUIREMENTS]
 REQ-LI-001 : fresh install on an empty target dir completes with services registered -> e1
 REQ-LI-002 : upgrade install preserves existing user data -> e2
-REQ-LI-003 : repair with existing distro skips download and import, re-runs config -> e3
-REQ-LI-004 : repair without an existing distro downloads and imports fresh (never refuses) -> e10
-REQ-LI-005 : uninstall requires explicit confirmation; deletes the distro and its data -> e5, e8, e9, f4
-REQ-LI-006 : verify-bundle passes on matching hashes, fails on mismatch -> e6, f3
-REQ-LI-007 : set-passwords writes fresh credentials -> e7
 REQ-LI-008 : install refuses occupied non-install dirs; installer is per-user, no admin required -> f2
-REQ-LI-009 : uninstall removes the scheduled task only if it belongs to this distro -> e5, e8, e9
 REQ-LI-010 : no machine-specific paths and no release pins anywhere in the installer sources -> e1

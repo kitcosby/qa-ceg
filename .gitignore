@@ -8,3 +8,5 @@ __pycache__/
 
 # regenerable artifacts (rebuild with: python3 ceg.py --all)
 suites/*.tests.json
+
+suites/*.tests.json.bak

@@ -1,0 +1,43 @@
+# CEG: bible-project-interlinear — interlinear page branch
+# Branch of bible-project.ceg (root split, 2026-11-12, Kit's authoring
+# lesson): single-page branch, so the page input itself is dropped —
+# every state in this file is the interlinear page. Product
+# documentation lives in bible-project.ceg's header.
+
+[PAGE]
+Bible website page (v2): interlinear.
+
+[INPUTS]
+c1 = ref_valid : no | yes
+c13 = nav_dynamic : no | yes
+c14 = verse_edge : first | middle | last
+c18 = verse_hidden : no | yes
+
+[CONSTRAINTS]
+# One page: reference validity, the dynamic navigation, the verse's
+# position in its chapter (one and only one of first/middle/last), and
+# the hidden flag. Nothing here belongs to another page.
+
+[SUCCESS]
+e23 = interlinear page renders the verse's Hebrew words in Hebrew order, each with a translation drop-down and, where the word has real variants, a variant drop-down
+e23 <= c1=yes
+e24 = interlinear nav offers Book/Chapter/Verse drop-downs; the chapter list follows the book and the verse list follows the chapter (via /api/*)
+e24 <= c1=yes AND c13=yes
+e25a = at the first verse of a chapter, the Prev link rolls back to the last verse of the previous chapter (or previous book)
+e25a <= c1=yes AND c14=first
+e25b = at the last verse of a chapter, the Next link rolls forward to the first verse of the next chapter (or next book)
+e25b <= c1=yes AND c14=last
+e27 = interlinear page renders the English sentence in English (KJV) word order with supplied words italicized
+e27 <= c1=yes
+e35 = words with no real variants show "none" instead of a variant drop-down; words with real variants keep the drop-down
+e35 <= c1=yes
+
+[FAIL]
+f9 = interlinear page shows not-found for an invalid reference
+f9 <= c1=no
+f11 = a hidden verse shows not-found on verse, interlinear, and reading pages, and /api/verse returns 404 {"error": "not found"} for it, exactly as for an invalid reference
+f11 <= c18=yes
+
+[REQUIREMENTS]
+REQ-BB-012 : interlinear page shows each Hebrew word with translation and (where real) variant drop-downs, dynamic Book/Chapter/Verse navigation, Prev/Next rollover across chapter and book boundaries, the English sentence in English word order with supplied words italicized, words with no real variance show "none", and invalid references show not-found (bibliomancy half, e26, in bible-project-word.ceg) -> e23, e24, e25a, e25b, e27, e35, f9
+REQ-BB-018 : verses flagged hidden are retained in the data but never render: not-found on verse/interlinear/reading and via the API (listing half in bible-project.ceg, verse/reading half in bible-project-verse.ceg) -> f11

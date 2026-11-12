@@ -66,6 +66,34 @@ Multiple rules may set the same effect (separate success paths stay in
 reach for one, you are holding an O, an I, or an unconstrained
 bifurcation. Name it.
 
+## Kit's authoring lesson (2026-11-12)
+
+How a proper .ceg is authored, in Kit's words as dictated and decoded
+with him the same day:
+
+- The graph sits between failure testing and success testing (the
+  separate [FAIL] and [SUCCESS] graphs).
+- It opens with **a big one-and-only-one at the beginning that splits**
+  — the root division of the graph is an O, so each branch generates
+  on its own instead of one giant cross-product.
+- **In success testing, nothing is unconstrained.** An unconstrained
+  success input guarantees inevitable conflict. Every field is either
+  one-and-only-one (O) or inclusive (I), depending on the field.
+- The failure side is handled with masking (M).
+- An input that is never used, or is completely unneeded, does not
+  belong in the file at all — every unconstrained input multiplies
+  the combination space.
+- When you reach for an OR, you are holding an O, an I, or an
+  unconstrained bifurcation — remove the OR and name the constraint.
+
+Audit note the same day: bible-project.ceg violates the success rule —
+its [CONSTRAINTS] section is empty (a single comment claims none is
+needed), so all 20 inputs bifurcate freely: the 14-valued page input
+cross-multiplies with 19 inputs that each matter to only one or two
+pages, for 46,006,272 combinations. On 2026-09-30 the same file
+generated at 184,320 combinations; unconstrained growth since then
+is what made its run un-generatable.
+
 ## The generator (ceg.py)
 
 `python3 ceg.py <file.ceg>` parses, enumerates, constrains, evaluates,

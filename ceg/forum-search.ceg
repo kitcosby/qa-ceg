@@ -1,0 +1,42 @@
+# CEG: forum-search — search / comments-API branch of the forum graph
+# Branch of forum.ceg (root split, 2026-11-12, Kit's authoring lesson):
+# the page one-and-only-one splits the graph; this branch carries the
+# two read surfaces and only their inputs.
+
+[PAGE]
+Forum read surfaces: /search, /api/comments. Grounded in app.py routes
+and the verified 12-check return-flow test (2026-09-28).
+
+[INPUTS]
+c0 = page : search | api_comments
+c5 = session : logged_out | logged_in
+c9 = csrf_token : missing | valid
+c10 = search_query : empty | valid
+c11 = form_submit : no | yes
+c12 = rtheory_link : absent | present
+
+[CONSTRAINTS]
+# Only these surfaces' own inputs are present. c9/c11 appear solely
+# because the pre-split e12 rules for the search page are stated in
+# terms of them; neither surface can produce the CSRF failure (f10
+# lives in the posting branches).
+
+[SUCCESS]
+e10 = search returns matching threads for a valid query
+e10 <= c0=search AND c10=valid
+e11 = comments API recognizes the logged-in forum user
+e11 <= c0=api_comments AND c5=logged_in
+e12 = an HTML forum page headers a working R Theory return link
+# Applicability, verified against app.py: the JSON comments API has no
+# header, so e12 carries search rules only in this branch.
+e12 <= c12=present AND c0=search AND c11=no
+e12 <= c12=present AND c0=search AND c11=yes AND c9=valid
+
+[FAIL]
+f11 = comments API treats a logged-out reader as anonymous
+f11 <= c0=api_comments AND c5=logged_out
+
+[REQUIREMENTS]
+REQ-FO-014 : search returns matching threads for a valid query -> e10
+REQ-FO-015 : the comments API recognizes logged-in users and treats logged-out readers as anonymous -> e11, f11
+REQ-FO-016 : every rendered HTML forum page carries a working R Theory return link; the JSON comments API and CSRF-reject pages are exempt (auth and thread rules in the sibling branches) -> e12

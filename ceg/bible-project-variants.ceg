@@ -1,0 +1,51 @@
+# CEG: bible-project-variants — variants page branch
+# Branch of bible-project.ceg (root split, 2026-11-12, Kit's authoring
+# lesson): single-page branch, so the page input itself is dropped —
+# every state in this file is the variants page. Product documentation
+# lives in bible-project.ceg's header.
+# Parser note: effect descriptions are single-line in this file (the
+# pre-split graph carried a multiline e19 description that ceg.py
+# rejects; the full wording is preserved in this header comment):
+# e19 — variants page shows the Hebrew word drop-down (empty with an
+# explanatory note until academic/textual variants are loaded; v1
+# data-artifact rows excluded per Kit 2026-10-01).
+# Branch convention: effects whose pre-split rule was the page alone
+# (e19, e37 — they hold whenever this page renders) are encoded as one
+# rule per state of c11, the branch's selection input, since the
+# format has no condition-less rule. Semantically identical.
+
+[PAGE]
+Bible website page (v2): variants.
+
+[INPUTS]
+c10 = variant_search : empty | text
+c11 = variant_word : none | valid | invalid
+c12 = variants_present : no | yes
+
+[CONSTRAINTS]
+# One page, three fields: the search text, the selected word (one and
+# only one selection state), and whether that word has variants. No
+# foreign-page inputs exist in this branch to constrain against.
+
+[SUCCESS]
+e19 = variants page shows the Hebrew word drop-down (empty with an explanatory note until academic/textual variants are loaded; v1 data-artifact rows excluded per Kit 2026-10-01)
+e19 <= c11=none
+e19 <= c11=valid
+e19 <= c11=invalid
+e20 = search filters the drop-down to matching Hebrew words
+e20 <= c10=text
+e21 = selecting a valid word with variants shows its variant readings table
+e21 <= c11=valid AND c12=yes
+e37 = the variants drop-down lists only words having two or more distinct variant readings after medial/final letterform folding
+e37 <= c11=none
+e37 <= c11=valid
+e37 <= c11=invalid
+
+[FAIL]
+f7 = variants page shows "Unknown word id" for a nonexistent word id
+f7 <= c11=invalid
+f8 = variants page shows "No variants recorded" for a word with no variants
+f8 <= c11=valid AND c12=no
+
+[REQUIREMENTS]
+REQ-BB-011 : variants page offers the Hebrew word drop-down (only words with two or more distinct variant readings) with search, shows variant readings for a selected word, and handles unknown/empty cases (index link half, e22, in bible-project.ceg) -> e19, e20, e21, e37, f7, f8

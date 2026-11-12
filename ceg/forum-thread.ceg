@@ -1,0 +1,58 @@
+# CEG: forum-thread — new-thread / thread branch of the forum graph
+# Branch of forum.ceg (root split, 2026-11-12, Kit's authoring lesson):
+# the page one-and-only-one splits the graph; this branch carries the
+# two posting pages and only their inputs.
+
+[PAGE]
+Forum posting pages: /new_thread, /thread/<id>. Grounded in app.py
+routes and the verified 12-check return-flow test (2026-09-28).
+
+[INPUTS]
+c0 = page : new_thread | thread
+c5 = session : logged_out | logged_in
+c6 = comment_body : empty | valid
+c7 = thread_title : blank | provided
+c8 = thread_category : none | chosen
+c9 = csrf_token : missing | valid
+c11 = form_submit : no | yes
+c12 = rtheory_link : absent | present
+
+[CONSTRAINTS]
+# Only the posting pages' own inputs are present. Session state is a
+# single binary; title/category/body are one-and-only-one per
+# submission. CSRF precedence on the failure side is guard-encoded in
+# the fail rules (a 403 masks all other validation).
+
+[SUCCESS]
+e7 = new-thread form renders for a logged-in user
+e7 <= c0=new_thread AND c5=logged_in AND c11=no
+e8 = thread is created and the author lands on it
+e8 <= c0=new_thread AND c5=logged_in AND c7=provided AND c8=chosen AND c9=valid AND c11=yes
+e9 = comment posts to the thread and appears in the list
+e9 <= c0=thread AND c5=logged_in AND c6=valid AND c9=valid AND c11=yes
+e12 = an HTML forum page headers a working R Theory return link
+# Applicability, verified against app.py: a CSRF-rejected POST returns
+# Flask's default 403 page (no header). e12 is expected only when an
+# HTML page actually renders.
+e12 <= c12=present AND c0=new_thread AND c11=no
+e12 <= c12=present AND c0=new_thread AND c11=yes AND c9=valid
+e12 <= c12=present AND c0=thread AND c11=no
+e12 <= c12=present AND c0=thread AND c11=yes AND c9=valid
+
+[FAIL]
+f7 = anonymous new-thread request is refused and sent to login with next
+# GET of the form is refused the same way as POST; no c11 guard.
+f7 <= c0=new_thread AND c5=logged_out
+f8 = anonymous comment POST is refused
+f8 <= c0=thread AND c5=logged_out AND c11=yes
+f9 = empty comment POST is rejected, thread re-renders with the error
+f9 <= c0=thread AND c5=logged_in AND c6=empty AND c9=valid AND c11=yes
+f10 = POST with missing CSRF token is rejected
+f10 <= c0=new_thread AND c9=missing AND c11=yes
+f10 <= c0=thread AND c9=missing AND c11=yes
+
+[REQUIREMENTS]
+REQ-FO-011 : new threads require login, a title, and a category -> e7, e8, f7
+REQ-FO-012 : comments require login and a non-empty body -> e9, f8, f9
+REQ-FO-013 : POSTs without a valid CSRF token are rejected with 403, masking all other validation (auth-page rules in forum.ceg) -> f10
+REQ-FO-016 : every rendered HTML forum page carries a working R Theory return link; the JSON comments API and CSRF-reject pages are exempt (auth and search rules in the sibling branches) -> e12

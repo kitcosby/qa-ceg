@@ -1,0 +1,33 @@
+# CEG: lampy-installer-uninstall — uninstall flow branch
+# Branch of lampy-installer.ceg (root split, 2026-11-12, Kit's
+# authoring lesson): the flow one-and-only-one splits the graph; this
+# branch carries the uninstall flow and only its inputs.
+
+[PAGE]
+Installer flow: uninstall. Grounded in uninstall.ps1 (v1.1.10
+corrections in lampy-installer.ceg's header).
+
+[INPUTS]
+c9 = confirm : no | yes
+c10 = scheduled_task : absent | this_distro | other_distro
+
+[CONSTRAINTS]
+# Confirmation is the gate (one-and-only-one: given or not); the
+# scheduled task's ownership is one-and-only-one (absent, this distro's,
+# or a foreign one). No other flow's inputs exist in this branch.
+
+[SUCCESS]
+e5 = uninstall removes distro, install dir, and its own scheduled task on confirmation (v1.1.10)
+e5 <= c9=yes AND c10=this_distro
+e8 = uninstall removes distro and install dir but leaves a foreign scheduled task (v1.1.10 safety)
+e8 <= c9=yes AND c10=other_distro
+e9 = uninstall removes distro and install dir when no scheduled task exists
+e9 <= c9=yes AND c10=absent
+
+[FAIL]
+f4 = uninstall aborts on missing confirmation (distro and data left untouched)
+f4 <= c9=no
+
+[REQUIREMENTS]
+REQ-LI-005 : uninstall requires explicit confirmation; deletes the distro and its data -> e5, e8, e9, f4
+REQ-LI-009 : uninstall removes the scheduled task only if it belongs to this distro -> e5, e8, e9

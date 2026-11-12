@@ -1,0 +1,25 @@
+# CEG: lampy-installer-verify — verify-bundle flow branch
+# Branch of lampy-installer.ceg (root split, 2026-11-12, Kit's
+# authoring lesson): the flow one-and-only-one splits the graph; this
+# branch carries the verify-bundle flow and its single deciding input.
+
+[PAGE]
+Installer flow: verify-bundle. Grounded in verify-bundle.py.
+
+[INPUTS]
+c5 = bundle_hash : match | mismatch
+
+[CONSTRAINTS]
+# One flow, one fact: the hashes either match the manifest or they do
+# not. Both states are demonstrated — one success, one failure.
+
+[SUCCESS]
+e6 = verify-bundle passes when every hash matches the manifest
+e6 <= c5=match
+
+[FAIL]
+f3 = verify-bundle fails on hash mismatch
+f3 <= c5=mismatch
+
+[REQUIREMENTS]
+REQ-LI-006 : verify-bundle passes on matching hashes, fails on mismatch -> e6, f3

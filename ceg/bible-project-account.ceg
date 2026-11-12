@@ -1,0 +1,36 @@
+# CEG: bible-project-account — signup / login / translations branch
+# Branch of bible-project.ceg (root split, 2026-11-12, Kit's authoring
+# lesson): the account pages, whose inputs interlock around
+# authentication state. Product documentation lives in
+# bible-project.ceg's header.
+
+[PAGE]
+Bible website pages (v2): signup, login, translations.
+
+[INPUTS]
+c0 = page : signup | login | translations
+c16 = auth : logged_out | logged_in
+c17 = credentials : right | wrong
+
+[CONSTRAINTS]
+# One account cluster: the page is one-and-only-one; credentials are
+# one-and-only-one (right or wrong); auth state is a single binary.
+# No foreign-page inputs exist in this branch.
+
+[SUCCESS]
+e10 = translations page lists and manages translations
+e10 <= c0=translations
+e31 = signup creates the account and logs the user in
+e31 <= c0=signup
+e32 = login with correct credentials authenticates the user
+e32 <= c0=login AND c17=right
+e33 = translations created while logged in are owned by that user
+e33 <= c0=translations AND c16=logged_in
+
+[FAIL]
+f10 = login with wrong credentials is rejected
+f10 <= c0=login AND c17=wrong
+
+[REQUIREMENTS]
+REQ-BB-005 : translations page lists and manages translations -> e10
+REQ-BB-014 : user accounts: signup creates the account and logs the user in; login authenticates with correct credentials and rejects wrong ones; translations created while logged in are owned by that user -> e31, e32, f10, e33
