@@ -101,6 +101,20 @@ pages, for 46,006,272 combinations. On 2026-09-30 the same file
 generated at 184,320 combinations; unconstrained growth since then
 is what made its run un-generatable.
 
+## Stubs for untested functionality (Kit, 2026-11-12)
+
+When a graph is split by functionality, the functionality a given
+graph is NOT permuting still has to be present in the run — as stubs:
+fixed traversals along known stable valid paths. The permutations
+then isolate failure cases for the failure graph against a realistic,
+stable surround, instead of testing the branch in a vacuum.
+
+Hygiene rule: **rotate the stubs for each regression.** Never run two
+regressions on the same stub path — a fixed stub bakes in a blind
+spot exactly where it stands. Rotating the stub selection each
+regression spreads coverage of the surrounding functionality across
+successive runs while the branch under test stays isolated.
+
 ## The generator (ceg.py)
 
 `python3 ceg.py <file.ceg>` parses, enumerates, constrains, evaluates,
