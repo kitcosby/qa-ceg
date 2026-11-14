@@ -8,6 +8,21 @@ Every input on the page goes in the graph, every requirement maps to
 effects, every possible outcome is evaluated, then the test suite is
 generated. The graphs are the contract, and the contract must be total.
 
+**Authoring doctrine update (Kit, 2026-11-12, in `CEG_FORMAT.md`):** a proper
+.ceg opens with a root one-and-only-one (`O(...)`) split so each branch
+generates on its own; in success testing nothing is unconstrained (every
+input is `O` or `I`); the failure side is handled with masking (`M(...)`);
+an input that is never used does not belong in the file. Functionality a
+split graph is not permuting is present as **stubs** — fixed traversals
+along known stable valid paths — and the stub selection is **rotated each
+regression** so no blind spot bakes in. **Standing hold (Kit, 2026-11-12):**
+the paradigm cleanup comes before any further graph generation — no new
+.ceg graphs are authored and no suites are regenerated until the cleanup
+is recorded DONE (GPT queue task CEG-PARADIGM-CLEANUP) or Kit lifts the
+hold. The bible-project model is now split by functionality: the monolith
+`bible-project.ceg` plus per-area graphs for account, interlinear,
+variants, verse, and word pages.
+
 **Role boundary:** the QA manager finds and flags issues with reproduction
 steps only. It NEVER debugs and NEVER fixes — programmers debug their own
 issues.
@@ -30,9 +45,11 @@ flowchart LR
     P0 -->|"QA report with reproduction steps"| E1
 ```
 
-Target products (one .ceg graph each): r-theory-rewrite, the forum app
-(lampy-admin), lampy-installer, bible-project, and the Facebook profile
-daily routine (standing daily management, not a repo).
+Target products: r-theory-rewrite (1 graph), the forum app in lampy-admin
+(3 graphs: forum, forum-search, forum-thread), lampy-installer (5 graphs),
+bible-project (6 graphs: the monolith plus account, interlinear, variants,
+verse, and word splits), and the Facebook profile daily routine (1 graph;
+standing daily management, not a repo) — 16 .ceg files in total.
 
 ## 2. Level-1 data flow diagram
 
@@ -43,7 +60,7 @@ flowchart LR
     E3["Live test targets"]
     E4["GitHub issues"]
     P1("1.0 Detect changes")
-    P2("2.0 Regenerate suites")
+    P2("2.0 Regenerate suites - HELD 2026-11-12 pending paradigm cleanup")
     P3("3.0 Execute tests")
     P4("4.0 File and sync issues")
     D1[("D1 .ceg model files")]
@@ -86,6 +103,8 @@ erDiagram
     CEG_FILE ||--o{ CEG_INPUT : declares
     CEG_FILE ||--o{ CEG_EFFECT : declares
     CEG_FILE ||--o{ CEG_REQUIREMENT : declares
+    CEG_FILE ||--o{ CEG_CONSTRAINT : constrained_by
+    CEG_FILE ||--o{ STUB_PATH : stubbed_by
     CEG_FILE ||--|| TEST_SUITE : generates
     TEST_SUITE ||--o{ TEST_CASE : contains
     TEST_CASE }o--o{ CEG_REQUIREMENT : covers
@@ -144,14 +163,35 @@ erDiagram
         string direction
         string at
     }
+    CEG_CONSTRAINT {
+        string ceg_name FK
+        string kind
+        string causes
+    }
+    STUB_PATH {
+        string stub_id PK
+        string ceg_name FK
+        string functionality
+        string valid_path
+        string last_regression
+    }
 ```
 
 Notes on the ERD: the public repo holds the model and the generated
 suites; the bug database is private by design. `CEG_INPUT.states` is the
 bifurcated state list (`name : off | on`, index 0 always the off state);
 `CEG_EFFECT.rule` is the AND-only success/fail logic (`e1 <= c1=real`,
-`f1 <= c1=spam`); `TEST_SUITE.combo_count` is the Cartesian enumeration
-total (e.g. 13,824 for bible-project v2, 2,880 for lampy-installer);
+`f1 <= c1=spam`); `CEG_CONSTRAINT.kind` is `O` (one-and-only-one — the
+root split of a properly authored graph), `I` (inclusive), `R` (requires),
+or `M` (masks); success graphs carry no unconstrained inputs (Kit
+2026-11-12). `STUB_PATH` records the fixed valid-path traversals standing
+in for functionality a split graph does not permute; `last_regression`
+supports the rotate-every-regression hygiene rule. `TEST_SUITE.combo_count` is the Cartesian enumeration
+total (e.g. 13,824 for bible-project v2, 2,880 for lampy-installer); the
+unsplit `bible-project.ceg` monolith audited at 46,006,272 combinations on
+2026-11-12 (empty [CONSTRAINTS] — all 20 inputs bifurcating freely), which
+is what made its run un-generatable and motivated the split + root-`O`
+doctrine;
 `uncovered` must be 0. The `.tests.json` full suites, `bugs.db`,
 `PRIVATE_LEDGER.md` (regenerated export of the bug database), `state.json`
 watermarks, and `logs/` stay local via `.gitignore`; only the `.tests.md`
@@ -164,6 +204,24 @@ into the sync, not an owned entity.
   (285 lines), `bugs.py` (378 lines), `qa_daily.py` (393 lines),
   `ceg/*.ceg` (5 graphs), `suites/*.tests.md` (5 published suites),
   `.gitignore`, `README.md`.
+- OBSERVED (2026-11-14 run, commits 2026-11-11/12 since the 2026-10-13
+  watermark 0ca035e5; 5 commits): `CEG_FORMAT.md` at HEAD a3493634 gained
+  the standing hold (paradigm cleanup before further generation), Kit's
+  authoring lesson (root one-and-only-one split; success never
+  unconstrained; failure via masking; unused inputs removed), and the
+  stubs doctrine (fixed stable valid paths for unpermuted functionality,
+  rotated each regression) — commits adcd0360 (re-authoring), 6bccd38f
+  (hold), a3493634 (stubs). The bible-project CEG catch-up (d1d04729,
+  2026-11-11) split the model: `ceg/` at HEAD holds 16 graphs —
+  bible-project x6 (monolith + account, interlinear, variants, verse,
+  word), forum x3, lampy-installer x5, profile, r-theory-rewrite. The
+  same `CEG_FORMAT.md` records the monolith audit: 46,006,272
+  combinations with an empty [CONSTRAINTS] section.
+- INFERRED: the `CEG_CONSTRAINT` and `STUB_PATH` entities — the .ceg text
+  format carries constraints inline in each file's [CONSTRAINTS] section
+  and stubs are a run-time traversal choice, not stored tables; both are
+  modeled as entities because the format and the rotation rule give them
+  identity and lifecycle, per the ERD conventions of this document.
 - OBSERVED (`README.md`): the no-OR doctrine; `O(...)` exclusive / `I(...)`
   inclusive / bifurcate naming; success and fail graphs separated with
   `M(a, b)` masks; inputs bifurcated with state index 0 as off;
